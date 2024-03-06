@@ -1,0 +1,33 @@
+name: build and run
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Runs every day at midnight (beginning of the day)
+  workflow_dispatch: # Manual trigger
+
+env:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dkotlin.incremental=false"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v2
+        with:
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/wrapper-validation-action@v2
+
+      - name: Set execute permission on Gradle wrapper
+        run: chmod +x gradlew
+
+      - name: Clean and build project with Gradle
+        run: ./gradlew clean build
+
+      - name: Run ZPlexSync
+        run: java -jar build/libs/*.jar
