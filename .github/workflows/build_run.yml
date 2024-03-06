@@ -27,7 +27,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Clean and build project with Gradle
-        run: ./gradlew clean build
+        run: ./gradlew clean shadowJar
 
       - name: Run ZPlexSync
         run: java -jar build/libs/*.jar
