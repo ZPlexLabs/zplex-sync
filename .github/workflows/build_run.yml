@@ -32,3 +32,12 @@ jobs:
 
       - name: Run ZPlexSync
         run: java -jar build/libs/*.jar
+        env:
+          GOOGLE_DRIVE_CLIENT_EMAIL: ${{ secrets.GOOGLE_DRIVE_CLIENT_EMAIL }}
+          GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+          GOOGLE_DRIVE_PRIVATE_KEY_ID: ${{ secrets.GOOGLE_DRIVE_PRIVATE_KEY_ID }}
+          GOOGLE_DRIVE_PRIVATE_KEY_PKCS8: ${{ secrets.GOOGLE_DRIVE_PRIVATE_KEY_PKCS8 }}
+          MOVIES_FOLDER: ${{ secrets.MOVIES_FOLDER }}
+          SHOWS_FOLDER: ${{ secrets.SHOWS_FOLDER }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          ZPLEX_DATABASE_URL: ${{ secrets.ZPLEX_DATABASE_URL }}
