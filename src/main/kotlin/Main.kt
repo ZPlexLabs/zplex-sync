@@ -1,5 +1,9 @@
 package zechs.zplex.sync
 
+import zechs.zplex.sync.data.repository.IndexingService
+import kotlin.system.exitProcess
+
 fun main() {
-    println("Hello World!")
+    IndexingService().invoke()
+    exitProcess(1)
 }
