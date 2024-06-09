@@ -9,6 +9,5 @@ interface FileDao {
     fun getAllEpisodesFiles(): List<DriveFile>
     fun getFileById(id: String): DriveFile?
     fun deleteFileById(id: String)
-    fun batchAddFiles(files: List<DriveFile>)
 
 }

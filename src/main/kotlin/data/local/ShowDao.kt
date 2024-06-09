@@ -25,5 +25,5 @@ interface ShowDao {
     fun deleteEpisode(episodeId: Int)
     fun getEpisodes(seasonId: Int): List<Episode>
     fun getEpisodeById(episodeId: Int): Episode?
-    fun batchAddEpisode(episodes: List<Episode>)
+    fun batchAddEpisodeAndFiles(episodes: List<Episode>, files: List<DriveFile>)
 }

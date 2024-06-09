@@ -651,14 +651,32 @@ class TmdbRepository(
         return null
     }
 
-    override fun batchAddEpisode(episodes: List<Episode>) {
+    override fun batchAddEpisodeAndFiles(episodes: List<Episode>, files: List<DriveFile>) {
         val connection: Connection = getConnection()
+        var fileStatement: PreparedStatement? = null
         var episodeStatement: PreparedStatement? = null
 
         try {
             connection.autoCommit = false // Start a transaction
 
-            println("Starting batchAddEpisode method for ${episodes.size} episodes")
+            println("Starting batchAddEpisodeAndFiles method for ${episodes.size} episodes and ${files.size} files")
+
+            // Insert files
+            val insertFileQuery = """
+                INSERT INTO files (id, name, size)
+                VALUES (?, ?, ?)
+            """.trimIndent()
+            fileStatement = connection.prepareStatement(insertFileQuery)
+
+            files.forEach { file ->
+                fileStatement.setString(1, file.id)
+                fileStatement.setString(2, file.name)
+                fileStatement.setLong(3, file.size)
+                fileStatement.addBatch()
+            }
+            println("Executing batch files")
+            fileStatement.executeBatch()
+            println("Files inserted successfully")
 
             // Insert episodes
             val episodeQuery = """
@@ -676,8 +694,10 @@ class TmdbRepository(
                 episodeStatement.setString(7, episode.fileId)
                 episodeStatement.addBatch()
             }
+            println("Executing batch episodes")
             episodeStatement.executeBatch()
             println("Episodes inserted or updated successfully")
+
             connection.commit()
             println("Transaction committed successfully")
         } catch (e: SQLException) {
@@ -685,6 +705,7 @@ class TmdbRepository(
             e.printStackTrace()
         } finally {
             try {
+                fileStatement?.close()
                 episodeStatement?.close()
             } catch (ex: SQLException) {
                 ex.printStackTrace()
@@ -750,46 +771,6 @@ class TmdbRepository(
             println("File deleted: $id")
         } catch (e: SQLException) {
             println("Error occurred while deleting file: ${e.message}")
-        }
-    }
-
-    override fun batchAddFiles(files: List<DriveFile>) {
-        val connection: Connection = getConnection()
-        var fileStatement: PreparedStatement? = null
-
-        try {
-            connection.autoCommit = false // Start a transaction
-
-            println("Starting batchAddFiles method for ${files.size} files")
-
-            // Insert or update the seasons
-            val insertFileQuery = """
-                INSERT INTO files (id, name, size)
-                VALUES (?, ?, ?)
-            """.trimIndent()
-
-            fileStatement = connection.prepareStatement(insertFileQuery)
-
-            files.forEach { file ->
-                fileStatement.setString(1, file.id)
-                fileStatement.setString(2, file.name)
-                fileStatement.setLong(3, file.size)
-                fileStatement.executeUpdate()
-            }
-            fileStatement.executeBatch()
-            println("Files inserted successfully")
-            connection.commit()
-            println("Transaction committed successfully")
-        } catch (e: SQLException) {
-            connection.rollback()
-            e.printStackTrace()
-        } finally {
-            try {
-                fileStatement?.close()
-            } catch (ex: SQLException) {
-                ex.printStackTrace()
-            }
-            connection.autoCommit = true
         }
     }
 
