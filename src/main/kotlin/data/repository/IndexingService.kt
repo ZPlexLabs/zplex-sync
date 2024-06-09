@@ -311,11 +311,14 @@ class IndexingService {
             println("[DATABASE EXECUTION] ${seasonsActuallyNeedToBeInserted.size} seasons to be inserted.")
             tmdbRepository.batchAddSeason(seasonsActuallyNeedToBeInserted)
         }
-        println("[DATABASE EXECUTION] ${filesToBeInserted.size} files to be inserted.")
-        tmdbRepository.batchAddFiles(filesToBeInserted.toList())
-
-        println("[DATABASE EXECUTION] ${episodesToBeInserted.size} episodes to be inserted.")
-        tmdbRepository.batchAddEpisode(episodesToBeInserted.toList())
+        if (filesToBeInserted.isNotEmpty()) {
+            println("[DATABASE EXECUTION] ${filesToBeInserted.size} files to be inserted.")
+            tmdbRepository.batchAddFiles(filesToBeInserted.toList())
+        }
+        if (episodesToBeInserted.isNotEmpty()) {
+            println("[DATABASE EXECUTION] ${episodesToBeInserted.size} episodes to be inserted.")
+            tmdbRepository.batchAddEpisode(episodesToBeInserted.toList())
+        }
     }
 
     private data class ShowInfo(
