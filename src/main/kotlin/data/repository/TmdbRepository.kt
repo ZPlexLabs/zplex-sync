@@ -282,6 +282,26 @@ class TmdbRepository(
         return shows
     }
 
+    override fun getAllShowsIds(): List<Int> {
+        val showIds = mutableListOf<Int>()
+        val query = "SELECT id FROM shows ORDER BY id"
+        try {
+            getConnection().createStatement().use { statement ->
+                statement.executeQuery(query).use { resultSet ->
+                    resultSet?.let {
+                        while (resultSet.next()) {
+                            showIds.add(resultSet.getInt("id"))
+                        }
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            println("Error occurred while retrieving shows: ${e.message}")
+        }
+        return showIds
+    }
+
+
     override fun getShowById(id: Int): Show? {
         val query = "SELECT * FROM shows WHERE id = ? LIMIT 1"
         try {

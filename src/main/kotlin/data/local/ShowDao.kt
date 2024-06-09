@@ -8,6 +8,7 @@ import zechs.zplex.sync.data.model.Show
 interface ShowDao {
     fun upsertShow(show: Show, seasons: List<Season>, episodes: List<Episode>, files: List<DriveFile>)
     fun getAllShows(): List<Show>
+    fun getAllShowsIds(): List<Int>
     fun getShowById(id: Int): Show?
     fun deleteShowById(id: Int)
 

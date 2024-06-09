@@ -201,7 +201,7 @@ class IndexingService {
      * @param showsFolder A list of DriveFiles representing TV shows to be processed.
      */
     private fun processShows(showsFolder: List<File>) {
-
+        val showIdsInDatabase = tmdbRepository.getAllShowsIds()
         showsFolder
             .mapNotNull { parseFileName(it, extension = false) }
             .forEach { videoInfo ->
@@ -209,16 +209,16 @@ class IndexingService {
                     println()
                     println("Processing show: ${videoInfo.name}")
                     // does this tmdb-id exist in shows-table
-                    val show = tmdbRepository.getShowById(videoInfo.tmdbId)
+                    val showId = showIdsInDatabase.find { it == videoInfo.tmdbId }
                     // then we only add/remove existing items
-                    if (show != null) {
-                        val seasons = tmdbRepository.getSeasons(show.id)
+                    if (showId != null) {
+                        val seasons = tmdbRepository.getSeasons(showId)
                         val remoteSeasons = driveRepository.getFiles(
                             folderId = videoInfo.fileId,
                             foldersOnly = true
                         )
                         println(
-                            "[EXISTS SHOW] ${show.name} (${seasons.size} seasons saved, ${remoteSeasons.size} " +
+                            "[EXISTS SHOW] $showId (${seasons.size} seasons saved, ${remoteSeasons.size} " +
                                     "seasons found)"
                         )
                         val deleteSeasons = seasons.filter { season ->
@@ -233,7 +233,7 @@ class IndexingService {
                         val existingSeasons = findCommonSeasons(remoteSeasons, seasons)
                         println("Common seasons: ${existingSeasons.size}")
                         existingSeasons.forEach { existingSeason ->
-                            checkExistingSeason(show, remoteSeasons, existingSeason)
+                            checkExistingSeason(showId, remoteSeasons, existingSeason)
                         }
 
                         val newSeasonFolders = remoteSeasons.filter { season ->
@@ -242,7 +242,7 @@ class IndexingService {
 
                         println("Adding ${newSeasonFolders.size} seasons")
                         newSeasonFolders.forEach { newSeasonFolder ->
-                            addNewSeason(show, newSeasonFolder)
+                            addNewSeason(showId, newSeasonFolder)
                         }
                     } else {
                         println("[NOT EXIST SHOW] ${videoInfo.name}")
@@ -329,7 +329,7 @@ class IndexingService {
         return false
     }
 
-    private fun checkExistingSeason(show: Show, remoteSeasons: List<File>, existingSeason: Season) {
+    private fun checkExistingSeason(showId: Int, remoteSeasons: List<File>, existingSeason: Season) {
         val seasonFolder = remoteSeasons.find { it.name == "Season ${existingSeason.seasonNumber}" }!!
 
         val episodesFolder = driveRepository.getFiles(
@@ -338,7 +338,7 @@ class IndexingService {
         ).filter { it.mimeType.startsWith("video/") }
             .map { DriveFile(it.id, it.name, it.getSize().toLong()) }
         val episodeMap = buildEpisodeMap(episodesFolder)
-        val season = tmdbRepository.fetchSeason(show.id, existingSeason.seasonNumber)
+        val season = tmdbRepository.fetchSeason(showId, existingSeason.seasonNumber)
 
         println("Processing episodes of ${existingSeason.name}")
         val insertEpisodes = mutableMapOf<DriveFile, Episode>()
@@ -370,17 +370,17 @@ class IndexingService {
         }
     }
 
-    private fun addNewSeason(show: Show, newSeasonFolder: File) {
+    private fun addNewSeason(showId: Int, newSeasonFolder: File) {
         val seasonNumber = newSeasonFolder.name.split(" ")[1].toInt()
-        val season = tmdbRepository.fetchSeason(show.id, seasonNumber)
+        val season = tmdbRepository.fetchSeason(showId, seasonNumber)
         val seasonEntity = Season(
             id = season.id!!,
             name = season.name?.ifEmpty { "Season $seasonNumber" } ?: "Season $seasonNumber",
             posterPath = season.poster_path,
             seasonNumber = season.season_number,
-            showId = show.id
+            showId = showId
         )
-        tmdbRepository.addSeason(show.id, seasonEntity)
+        tmdbRepository.addSeason(showId, seasonEntity)
         println("[ADD SEASON] ${seasonEntity.name} [${seasonEntity.id}]")
 
         val episodesFolder = driveRepository.getFiles(
