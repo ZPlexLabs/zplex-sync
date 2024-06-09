@@ -12,7 +12,6 @@ import zechs.zplex.sync.data.model.Episode
 import zechs.zplex.sync.data.model.Movie
 import zechs.zplex.sync.data.model.Season
 import zechs.zplex.sync.data.model.SeasonEpisode
-import zechs.zplex.sync.data.model.Show
 import zechs.zplex.sync.data.remote.TmdbApi
 import zechs.zplex.sync.utils.Constants.Companion.IS_DEBUG
 import zechs.zplex.sync.utils.Constants.Companion.TMDB_API_KEY
@@ -218,7 +217,7 @@ class IndexingService {
                             foldersOnly = true
                         )
                         println(
-                            "[EXISTS SHOW] $showId (${seasons.size} seasons saved, ${remoteSeasons.size} " +
+                            "[EXISTS SHOW] ${videoInfo.name} [showId=$showId] (${seasons.size} seasons saved, ${remoteSeasons.size} " +
                                     "seasons found)"
                         )
                         val deleteSeasons = seasons.filter { season ->
@@ -359,7 +358,7 @@ class IndexingService {
                     )
                     insertEpisodes[matchingEpisode] = episodeEntity
                 } else {
-                    existCount++;
+                    existCount++
                 }
             }
         }
