@@ -333,6 +333,46 @@ class TmdbRepository(
         }
     }
 
+    override fun batchAddShow(shows: List<Show>) {
+        val connection: Connection = getConnection()
+        var showStatement: PreparedStatement? = null
+
+        try {
+            connection.autoCommit = false // Start a transaction
+
+            println("Starting batchAddShow method for ${shows.size} shows")
+
+            // Insert or update the show
+            val showQuery = """
+                INSERT INTO shows (id, name, poster_path, vote_average)
+                VALUES (?, ?, ?, ?)
+            """.trimIndent()
+            showStatement = connection.prepareStatement(showQuery)
+
+            shows.forEach { show ->
+                showStatement.setInt(1, show.id)
+                showStatement.setString(2, show.name)
+                showStatement.setString(3, show.posterPath)
+                showStatement.setDouble(4, show.voteAverage ?: 0.0)
+                showStatement.addBatch()
+            }
+            showStatement.executeBatch()
+            println("Show inserted or updated successfully")
+            connection.commit()
+            println("Transaction committed successfully")
+        } catch (e: SQLException) {
+            connection.rollback()
+            e.printStackTrace()
+        } finally {
+            try {
+                showStatement?.close()
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            }
+            connection.autoCommit = true
+        }
+    }
+
     override fun addSeason(showId: Int, season: Season) {
         val query = """
             INSERT INTO seasons (id, name, poster_path, season_number, show_id)
@@ -402,6 +442,65 @@ class TmdbRepository(
             println("Error occurred while retrieving season by id: ${e.message}")
         }
         return null
+    }
+
+    override fun getAllSeasonIds(): List<Int> {
+        val seasonIds = mutableListOf<Int>()
+        val query = "SELECT id FROM seasons ORDER BY id"
+        try {
+            getConnection().createStatement().use { statement ->
+                statement.executeQuery(query).use { resultSet ->
+                    resultSet?.let {
+                        while (resultSet.next()) {
+                            seasonIds.add(resultSet.getInt("id"))
+                        }
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            println("Error occurred while retrieving shows: ${e.message}")
+        }
+        return seasonIds
+    }
+
+    override fun batchAddSeason(seasons: List<Season>) {
+        val connection: Connection = getConnection()
+        var seasonStatement: PreparedStatement? = null
+
+        try {
+            connection.autoCommit = false // Start a transaction
+
+            println("Starting batchAddSeason method for ${seasons.size} seasons")
+
+            // Insert or update the seasons
+            val seasonQuery = """
+                INSERT INTO seasons (id, name, poster_path, season_number, show_id)
+                VALUES (?, ?, ?, ?, ?)
+            """.trimIndent()
+            seasonStatement = connection.prepareStatement(seasonQuery)
+            seasons.forEach { season ->
+                seasonStatement.setInt(1, season.id)
+                seasonStatement.setString(2, season.name)
+                seasonStatement.setString(3, season.posterPath)
+                seasonStatement.setInt(4, season.seasonNumber)
+                seasonStatement.setInt(5, season.showId)
+                seasonStatement.addBatch()
+            }
+            seasonStatement.executeBatch()
+            println("Seasons inserted or updated successfully")
+            connection.commit()
+            println("Transaction committed successfully")
+        } catch (e: SQLException) {
+            connection.rollback()
+            e.printStackTrace()
+        } finally {
+            try {
+                seasonStatement?.close()
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            }
+            connection.autoCommit = true
+        }
     }
 
     override fun addEpisode(seasonId: Int, episode: Episode, file: DriveFile) {
@@ -552,6 +651,48 @@ class TmdbRepository(
         return null
     }
 
+    override fun batchAddEpisode(episodes: List<Episode>) {
+        val connection: Connection = getConnection()
+        var episodeStatement: PreparedStatement? = null
+
+        try {
+            connection.autoCommit = false // Start a transaction
+
+            println("Starting batchAddEpisode method for ${episodes.size} episodes")
+
+            // Insert episodes
+            val episodeQuery = """
+                INSERT INTO episodes (id, title, episode_number, season_number, still_path, season_id, file_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+            episodeStatement = connection.prepareStatement(episodeQuery)
+            episodes.forEach { episode ->
+                episodeStatement.setInt(1, episode.id)
+                episodeStatement.setString(2, episode.title)
+                episodeStatement.setInt(3, episode.episodeNumber)
+                episodeStatement.setInt(4, episode.seasonNumber)
+                episodeStatement.setString(5, episode.stillPath)
+                episodeStatement.setInt(6, episode.seasonId)
+                episodeStatement.setString(7, episode.fileId)
+                episodeStatement.addBatch()
+            }
+            episodeStatement.executeBatch()
+            println("Episodes inserted or updated successfully")
+            connection.commit()
+            println("Transaction committed successfully")
+        } catch (e: SQLException) {
+            connection.rollback()
+            e.printStackTrace()
+        } finally {
+            try {
+                episodeStatement?.close()
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            }
+            connection.autoCommit = true
+        }
+    }
+
     private fun getFiles(query: String): List<DriveFile> {
         val files = mutableListOf<DriveFile>()
         try {
@@ -609,6 +750,46 @@ class TmdbRepository(
             println("File deleted: $id")
         } catch (e: SQLException) {
             println("Error occurred while deleting file: ${e.message}")
+        }
+    }
+
+    override fun batchAddFiles(files: List<DriveFile>) {
+        val connection: Connection = getConnection()
+        var fileStatement: PreparedStatement? = null
+
+        try {
+            connection.autoCommit = false // Start a transaction
+
+            println("Starting batchAddFiles method for ${files.size} files")
+
+            // Insert or update the seasons
+            val insertFileQuery = """
+                INSERT INTO files (id, name, size)
+                VALUES (?, ?, ?)
+            """.trimIndent()
+
+            fileStatement = connection.prepareStatement(insertFileQuery)
+
+            files.forEach { file ->
+                fileStatement.setString(1, file.id)
+                fileStatement.setString(2, file.name)
+                fileStatement.setLong(3, file.size)
+                fileStatement.executeUpdate()
+            }
+            fileStatement.executeBatch()
+            println("Files inserted successfully")
+            connection.commit()
+            println("Transaction committed successfully")
+        } catch (e: SQLException) {
+            connection.rollback()
+            e.printStackTrace()
+        } finally {
+            try {
+                fileStatement?.close()
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            }
+            connection.autoCommit = true
         }
     }
 

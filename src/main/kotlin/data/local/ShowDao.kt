@@ -11,15 +11,19 @@ interface ShowDao {
     fun getAllShowsIds(): List<Int>
     fun getShowById(id: Int): Show?
     fun deleteShowById(id: Int)
+    fun batchAddShow(shows: List<Show>)
 
     fun addSeason(showId: Int, season: Season)
     fun deleteSeason(seasonId: Int)
     fun getSeasons(showId: Int): List<Season>
     fun getSeasonById(seasonId: Int): Season?
+    fun getAllSeasonIds(): List<Int>
+    fun batchAddSeason(seasons: List<Season>)
 
     fun addEpisode(seasonId: Int, episode: Episode, file: DriveFile)
     fun addEpisodes(seasonId: Int, episodes: MutableMap<DriveFile, Episode>)
     fun deleteEpisode(episodeId: Int)
     fun getEpisodes(seasonId: Int): List<Episode>
     fun getEpisodeById(episodeId: Int): Episode?
+    fun batchAddEpisode(episodes: List<Episode>)
 }
