@@ -5,5 +5,5 @@ import kotlin.system.exitProcess
 
 fun main() {
     IndexingService().invoke()
-    exitProcess(1)
+    exitProcess(0)
 }
