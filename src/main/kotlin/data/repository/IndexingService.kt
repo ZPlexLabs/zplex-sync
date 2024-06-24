@@ -95,14 +95,21 @@ class IndexingService {
     private fun syncFiles(remoteFiles: List<File>, databaseFiles: List<DriveFile>): List<File> {
         println("Beginning file synchronization...")
 
+        val commonFiles = remoteFiles.filter { file -> databaseFiles.any { it.id == file.id } }
         val newFiles = remoteFiles.filter { file -> databaseFiles.none { it.id == file.id } }
         val deleteFileId = databaseFiles
             .filter { dbFile -> remoteFiles.none { it.id == dbFile.id } }
             .map { it.id }
 
+        val updateFiles = commonFiles.filter { remoteFile ->
+            val dbFile = databaseFiles.first { it.id == remoteFile.id }
+            dbFile.modifiedTime != remoteFile.modifiedTime.value
+        }
+        println("Number of files to be updated: ${updateFiles.size}")
         println("Number of new files to be inserted: ${newFiles.size}")
         println("Number of files to be deleted: ${deleteFileId.size}")
 
+        tmdbRepository.updateMoviesModifiedTime(updateFiles)
         tmdbRepository.deleteFiles(deleteFileId)
         println("File synchronization ended.")
 
@@ -120,7 +127,8 @@ class IndexingService {
 
             val movieFiles = driveRepository.getFiles(
                 folderId = System.getenv("MOVIES_FOLDER"),
-                foldersOnly = false
+                foldersOnly = false,
+                modifiedTime = true
             ).filter { it.mimeType.startsWith("video/") }
 
             // Sync files
@@ -151,17 +159,21 @@ class IndexingService {
      */
     private fun processMovies(driveFiles: List<File>) {
         driveFiles
-            .mapNotNull { parseFileName(it) }
-            .forEach { videoInfo ->
+            .mapNotNull {
+                val parse = parseFileName(it)
+                if (parse != null) Pair(parse, it)
+                else null
+            }
+            .forEach { (videoInfo, driveFile) ->
                 try {
-                    insertNewMovie(videoInfo)
+                    insertNewMovie(videoInfo, driveFile)
                 } catch (e: Exception) {
                     println("Error processing movie: ${videoInfo.name} (${e.message})")
                 }
             }
     }
 
-    private fun insertNewMovie(videoFile: Info) {
+    private fun insertNewMovie(videoFile: Info, driveFile: File) {
         println("New movie: ${videoFile.name}, inserting into the database.")
 
         val movieResponse = tmdbRepository.fetchMovie(videoFile.tmdbId)
@@ -171,12 +183,14 @@ class IndexingService {
             posterPath = movieResponse.poster_path,
             voteAverage = movieResponse.vote_average,
             releaseYear = videoFile.year,
-            fileId = videoFile.fileId
+            fileId = videoFile.fileId,
+            modifiedTime = driveFile.modifiedTime.value
         )
         val file = DriveFile(
             id = videoFile.fileId,
             name = videoFile.fileName,
-            size = videoFile.fileSize!!
+            size = videoFile.fileSize!!,
+            modifiedTime = driveFile.modifiedTime.value // this is not inserted
         )
         tmdbRepository.upsertMovie(movie, file)
     }
@@ -287,7 +301,9 @@ class IndexingService {
                                 showsToBeInserted.add(show)
                                 seasonToBeInserted.add(season)
                                 episodesToBeInserted.add(episode)
-                                filesToBeInserted.add(DriveFile(file.id, file.name, file.getSize()))
+                                filesToBeInserted.add(
+                                    DriveFile(file.id, file.name, file.getSize(), file.modifiedTime.value)
+                                )
                                 println("[ADD QUEUE] $path (${file.id})")
                             } ?: run { println("[ERROR] Episode not found: $path") }
                     }

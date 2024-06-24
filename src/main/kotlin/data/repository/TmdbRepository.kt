@@ -73,7 +73,7 @@ class TmdbRepository(
         """.trimIndent()
 
         val insertMovieQuery = """
-            INSERT INTO movies (id, title, poster_path, vote_average, year, file_id)
+            INSERT INTO movies (id, title, poster_path, vote_average, year, file_id, modified_time)
             VALUES (?, ?, ?, ?, ?, ?)
         """.trimIndent()
 
@@ -96,6 +96,7 @@ class TmdbRepository(
             movieStatement.setDouble(4, movie.voteAverage ?: 0.0)
             movieStatement.setInt(5, movie.releaseYear)
             movieStatement.setString(6, file.id)
+            movieStatement.setLong(7, movie.modifiedTime)
             movieStatement.executeUpdate()
 
             connection.commit()
@@ -163,6 +164,42 @@ class TmdbRepository(
             println("Movie deleted: $id")
         } catch (e: SQLException) {
             println("Error occurred while deleting movie: ${e.message}")
+        }
+    }
+
+    override fun updateMoviesModifiedTime(movieFiles: List<File>) {
+        val query = """
+            UPDATE movies
+            SET modified_time = ?
+            WHERE file_id = ?
+        """.trimIndent()
+        val connection = getConnection()
+        val updateStatement = connection.prepareStatement(query)
+        try {
+            connection.autoCommit = false
+            for (file in movieFiles) {
+                updateStatement.setLong(1, file.modifiedTime.value)
+                updateStatement.setString(2, file.id)
+                updateStatement.addBatch()
+            }
+            updateStatement.executeBatch()
+            connection.commit()
+            println("Updated ${movieFiles.size} movies")
+        } catch (e: SQLException) {
+            println("Error occurred while updating movies: ${e.message}")
+            try {
+                connection.rollback() // Rollback the transaction if an error occurs
+                println("Transaction rolled back due to an error.")
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            }
+        } finally {
+            try {
+                updateStatement?.close()
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            }
+            connection.autoCommit = true
         }
     }
 
@@ -737,7 +774,7 @@ class TmdbRepository(
     }
 
     override fun getAllMoviesFiles(): List<DriveFile> {
-        return getFiles("SELECT f.id, f.name, f.size FROM files f INNER JOIN movies m ON f.id = m.file_id ORDER BY f.id")
+        return getFiles("SELECT f.id, f.name, f.size, m.modified_time FROM files f INNER JOIN movies m ON f.id = m.file_id ORDER BY f.id")
     }
 
     override fun getAllEpisodesFiles(): List<DriveFile> {
@@ -781,6 +818,7 @@ class TmdbRepository(
             resultSet.getString("poster_path"),
             resultSet.getDouble("vote_average"),
             resultSet.getInt("year"),
+            resultSet.getLong("modified_time"),
             resultSet.getString("file_id")
         )
     }

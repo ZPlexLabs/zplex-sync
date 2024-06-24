@@ -21,16 +21,17 @@ class DriveRepository(
 
     override fun getAllFilesRecursively(folderId: String): List<DrivePathFile> = runBlocking {
         val filesList = mutableListOf<DrivePathFile>()
-        getAllFilesRecursive(folderId, "", filesList)
+        getAllFilesRecursive(folderId, "", filesList, true)
         return@runBlocking filesList
     }
 
     private suspend fun getAllFilesRecursive(
         folderId: String,
         parentPath: String,
-        filesList: MutableList<DrivePathFile>
+        filesList: MutableList<DrivePathFile>,
+        isFirstRun: Boolean
     ) {
-        val files = getFiles(folderId, false)
+        val files = getFiles(folderId, false, isFirstRun)
 
         files.map { file ->
             semaphore.withPermit {
@@ -38,7 +39,7 @@ class DriveRepository(
                     val filePath = parentPath + file.name
                     if (file.mimeType == "application/vnd.google-apps.folder") {
                         // If the file is a folder, recurse into it
-                        getAllFilesRecursive(file.id, "$filePath/", filesList)
+                        getAllFilesRecursive(file.id, "$filePath/", filesList, false)
                     } else {
                         // If the file is not a folder, add its path to the list
                         synchronized(filesList) {
@@ -50,7 +51,11 @@ class DriveRepository(
         }.awaitAll()
     }
 
-    override fun getFiles(folderId: String, foldersOnly: Boolean): List<File> {
+    override fun getFiles(
+        folderId: String,
+        foldersOnly: Boolean,
+        modifiedTime: Boolean
+    ): List<File> {
         val query = DriveApiQueryBuilder()
             .inParents(folderId)
             .trashed(false)
@@ -63,7 +68,8 @@ class DriveRepository(
             val response = getFiles(
                 query = query,
                 pageToken = pageToken,
-                pageSize = 1000
+                pageSize = 1000,
+                modifiedTime = modifiedTime
             )
             if (response != null) {
                 response.files
@@ -79,13 +85,14 @@ class DriveRepository(
     private fun getFiles(
         query: String,
         pageSize: Int = 25,
-        pageToken: String?
+        pageToken: String?,
+        modifiedTime: Boolean = false
     ): FileList? {
         return drive.service.files().list()
             .setPageSize(pageSize)
             .setQ(query)
             .setPageToken(pageToken)
-            .setFields("nextPageToken, files(id, name, size, mimeType)")
+            .setFields("nextPageToken, files(id, name, size, mimeType${if (modifiedTime) ", modifiedTime" else ""})")
             .execute()
     }
 }

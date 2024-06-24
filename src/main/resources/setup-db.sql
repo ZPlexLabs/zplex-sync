@@ -14,6 +14,7 @@ CREATE TABLE movies
     poster_path  TEXT,
     vote_average NUMERIC(3, 1)       NOT NULL,
     year         INTEGER             NOT NULL,
+    modified_time BIGINT              NOT NULL,
     file_id      TEXT REFERENCES files (id) ON DELETE CASCADE
 );
 
