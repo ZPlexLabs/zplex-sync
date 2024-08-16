@@ -109,7 +109,7 @@ class IndexingService {
         println("Number of new files to be inserted: ${newFiles.size}")
         println("Number of files to be deleted: ${deleteFileId.size}")
 
-        tmdbRepository.updateMoviesModifiedTime(updateFiles)
+        tmdbRepository.updateModifiedTime(updateFiles)
         tmdbRepository.deleteFiles(deleteFileId)
         println("File synchronization ended.")
 
@@ -127,8 +127,7 @@ class IndexingService {
 
             val movieFiles = driveRepository.getFiles(
                 folderId = System.getenv("MOVIES_FOLDER"),
-                foldersOnly = false,
-                modifiedTime = true
+                foldersOnly = false
             ).filter { it.mimeType.startsWith("video/") }
 
             // Sync files
@@ -183,14 +182,13 @@ class IndexingService {
             posterPath = movieResponse.poster_path,
             voteAverage = movieResponse.vote_average,
             releaseYear = videoFile.year,
-            fileId = videoFile.fileId,
-            modifiedTime = driveFile.modifiedTime.value
+            fileId = videoFile.fileId
         )
         val file = DriveFile(
             id = videoFile.fileId,
             name = videoFile.fileName,
             size = videoFile.fileSize!!,
-            modifiedTime = driveFile.modifiedTime.value // this is not inserted
+            modifiedTime = driveFile.modifiedTime.value
         )
         tmdbRepository.upsertMovie(movie, file)
     }
@@ -222,6 +220,13 @@ class IndexingService {
                 print("[DATABASE EXECUTION] Deleting ${deleteFileId.size} files from the database.")
                 tmdbRepository.deleteFiles(deleteFileId)
             }
+            val updateTheseFiles = remoteFiles.filter { remoteFile ->
+                val dbFile = databaseFiles.firstOrNull { it.id == remoteFile.file.id }
+                dbFile?.modifiedTime != remoteFile.file.modifiedTime.value
+            }.map { it.file }
+            println("[DATABASE EXECUTION] ${updateTheseFiles.size} files need to be updated.")
+            tmdbRepository.updateModifiedTime(updateTheseFiles)
+            syncModifiedTime()
             println("File synchronization ended.")
 
             // Processing shows
@@ -229,6 +234,25 @@ class IndexingService {
         } finally {
             println("Ended indexing shows")
         }
+    }
+
+    private fun syncModifiedTime() {
+        val remoteShowFolders = driveRepository.getFiles(
+            folderId = System.getenv("SHOWS_FOLDER"),
+            foldersOnly = true
+        )
+        val databaseShows = tmdbRepository.getAllShows()
+        val updateTheseShows = mutableListOf<Show>()
+        remoteShowFolders.forEach { remoteFolder ->
+            val dbShow = databaseShows.firstOrNull { show ->
+                parseShowFolderName(remoteFolder.name)?.tmdbId == show.id
+            }
+            if (dbShow != null && dbShow.modifiedTime != remoteFolder.modifiedTime.value) {
+                updateTheseShows.add(dbShow.copy(modifiedTime = remoteFolder.modifiedTime.value))
+            }
+        }
+        println("[DATABASE EXECUTION] ${updateTheseShows.size} shows need to be updated.")
+        tmdbRepository.updateShowsModifiedTime(updateTheseShows)
     }
 
     /**
@@ -242,7 +266,6 @@ class IndexingService {
      * After processing all shows, a sanitization process is performed to remove folders that exist
      * in the local database but no longer exist remotely.
      *
-     * @param showsFolder A list of DriveFiles representing TV shows to be processed.
      */
     private fun processShows(showFiles: List<DrivePathFile>) {
         val mapOfTvResponse = mutableMapOf<Int, TvResponse>()
@@ -269,7 +292,8 @@ class IndexingService {
                         .also { mapOfTvResponse[showInfo.tmdbId] = it }
                 }
 
-                val show = tvResponse.toShow()
+                val show = tvResponse.toShow(file.modifiedTime.value)
+
                 tvResponse.seasons
                     ?.first { it.season_number == seasonInfo }
                     ?.let { foundSeason ->

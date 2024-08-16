@@ -4,7 +4,8 @@ data class Show(
     val id: Int,
     val name: String,
     val posterPath: String?,
-    val voteAverage: Double?
+    val voteAverage: Double?,
+    val modifiedTime: Long
 )
 
 data class Season(
