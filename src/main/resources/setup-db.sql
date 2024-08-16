@@ -1,3 +1,5 @@
+-- Database: V1
+
 -- Create files table
 CREATE TABLE files
 (
@@ -14,7 +16,6 @@ CREATE TABLE movies
     poster_path  TEXT,
     vote_average NUMERIC(3, 1)       NOT NULL,
     year         INTEGER             NOT NULL,
-    modified_time BIGINT              NOT NULL,
     file_id      TEXT REFERENCES files (id) ON DELETE CASCADE
 );
 
@@ -89,3 +90,11 @@ CREATE TRIGGER check_seasons_before_show_delete
     ON seasons
     FOR EACH ROW
 EXECUTE FUNCTION delete_show_if_no_seasons();
+
+-- Database Migration: V1 -> V2
+
+-- Add column modified_time to files table
+ALTER TABLE files ADD COLUMN modified_time BIGINT NOT NULL DEFAULT 0;
+
+-- Add column modified_time to shows table
+ALTER TABLE shows ADD COLUMN modified_time BIGINT NOT NULL DEFAULT 0;
