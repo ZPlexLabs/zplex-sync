@@ -1,5 +1,6 @@
 package zechs.zplex.sync.data.repository
 
+import com.google.api.services.drive.model.File
 import data.model.DriveFile
 import java.sql.Connection
 import java.sql.PreparedStatement
@@ -68,8 +69,8 @@ class TmdbRepository(
         var movieStatement: PreparedStatement? = null
 
         val insertFileQuery = """
-            INSERT INTO files (id, name, size)
-            VALUES (?, ?, ?)
+            INSERT INTO files (id, name, size, modified_time)
+            VALUES (?, ?, ?, ?)
         """.trimIndent()
 
         val insertMovieQuery = """
@@ -87,6 +88,7 @@ class TmdbRepository(
             fileStatement.setString(1, file.id)
             fileStatement.setString(2, file.name)
             fileStatement.setLong(3, file.size)
+            fileStatement.setLong(4, file.modifiedTime)
             fileStatement.executeUpdate()
 
             movieStatement = connection.prepareStatement(insertMovieQuery)
@@ -166,6 +168,42 @@ class TmdbRepository(
         }
     }
 
+    override fun updateModifiedTime(files: List<File>) {
+        val query = """
+            UPDATE files
+            SET modified_time = ?
+            WHERE id = ?
+        """.trimIndent()
+        val connection = getConnection()
+        val updateStatement = connection.prepareStatement(query)
+        try {
+            connection.autoCommit = false
+            for (file in files) {
+                updateStatement.setLong(1, file.modifiedTime.value)
+                updateStatement.setString(2, file.id)
+                updateStatement.addBatch()
+            }
+            updateStatement.executeBatch()
+            connection.commit()
+            println("Updated ${files.size} files")
+        } catch (e: SQLException) {
+            println("Error occurred while updating movies: ${e.message}")
+            try {
+                connection.rollback() // Rollback the transaction if an error occurs
+                println("Transaction rolled back due to an error.")
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            }
+        } finally {
+            try {
+                updateStatement?.close()
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            }
+            connection.autoCommit = true
+        }
+    }
+
     override fun upsertShow(show: Show, seasons: List<Season>, episodes: List<Episode>, files: List<DriveFile>) {
         val connection: Connection = getConnection()
         val fileStatement: PreparedStatement?
@@ -179,8 +217,8 @@ class TmdbRepository(
             println("Starting upsertShow method")
 
             val insertFileQuery = """
-                INSERT INTO files (id, name, size)
-                VALUES (?, ?, ?)
+                INSERT INTO files (id, name, size, modified_time)
+                VALUES (?, ?, ?, ?)
             """.trimIndent()
 
             fileStatement = connection.prepareStatement(insertFileQuery)
@@ -189,13 +227,14 @@ class TmdbRepository(
                 fileStatement.setString(1, file.id)
                 fileStatement.setString(2, file.name)
                 fileStatement.setLong(3, file.size)
+                fileStatement.setLong(4, file.modifiedTime)
                 fileStatement.executeUpdate()
             }
 
             // Insert or update the show
             val showQuery = """
-                INSERT INTO shows (id, name, poster_path, vote_average)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO shows (id, name, poster_path, vote_average, modified_time)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO NOTHING
             """.trimIndent()
             showStatement = connection.prepareStatement(showQuery)
@@ -203,6 +242,7 @@ class TmdbRepository(
             showStatement.setString(2, show.name)
             showStatement.setString(3, show.posterPath)
             showStatement.setDouble(4, show.voteAverage ?: 0.0)
+            showStatement.setLong(5, show.modifiedTime)
             println("Executing showStatement: $showStatement")
             showStatement.executeUpdate()
             println("Show inserted or updated successfully")
@@ -344,8 +384,8 @@ class TmdbRepository(
 
             // Insert or update the show
             val showQuery = """
-                INSERT INTO shows (id, name, poster_path, vote_average)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO shows (id, name, poster_path, vote_average, modified_time)
+                VALUES (?, ?, ?, ?, ?)
             """.trimIndent()
             showStatement = connection.prepareStatement(showQuery)
 
@@ -354,6 +394,7 @@ class TmdbRepository(
                 showStatement.setString(2, show.name)
                 showStatement.setString(3, show.posterPath)
                 showStatement.setDouble(4, show.voteAverage ?: 0.0)
+                showStatement.setLong(5, show.modifiedTime)
                 showStatement.addBatch()
             }
             showStatement.executeBatch()
@@ -366,6 +407,42 @@ class TmdbRepository(
         } finally {
             try {
                 showStatement?.close()
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            }
+            connection.autoCommit = true
+        }
+    }
+
+    override fun updateShowsModifiedTime(shows: List<Show>) {
+        val queryUpdateShow = """
+            UPDATE shows
+            SET modified_time = ?
+            WHERE id = ?
+        """.trimIndent()
+        val connection = getConnection()
+        val updateStatement = connection.prepareStatement(queryUpdateShow)
+        try {
+            connection.autoCommit = false
+            for (show in shows) {
+                updateStatement.setLong(1, show.modifiedTime)
+                updateStatement.setInt(2, show.id)
+                updateStatement.addBatch()
+            }
+            updateStatement.executeBatch()
+            connection.commit()
+            println("Updated ${shows.size} shows")
+        } catch (e: SQLException) {
+            println("Error occurred while updating movies: ${e.message}")
+            try {
+                connection.rollback() // Rollback the transaction if an error occurs
+                println("Transaction rolled back due to an error.")
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            }
+        } finally {
+            try {
+                updateStatement?.close()
             } catch (ex: SQLException) {
                 ex.printStackTrace()
             }
@@ -511,8 +588,8 @@ class TmdbRepository(
         """.trimIndent()
 
         val insertFileQuery = """
-            INSERT INTO files (id, name, size)
-            VALUES (?, ?, ?)
+            INSERT INTO files (id, name, size, modified_time)
+            VALUES (?, ?, ?, ?)
         """.trimIndent()
 
         try {
@@ -524,6 +601,7 @@ class TmdbRepository(
             fileStatement.setString(1, file.id)
             fileStatement.setString(2, file.name)
             fileStatement.setLong(3, file.size)
+            fileStatement.setLong(4, file.modifiedTime)
             fileStatement.executeUpdate()
 
             val episodeStatement = connection.prepareStatement(episodeQuery)
@@ -552,8 +630,8 @@ class TmdbRepository(
         """.trimIndent()
 
         val insertFileQuery = """
-            INSERT INTO files (id, name, size)
-            VALUES (?, ?, ?)
+            INSERT INTO files (id, name, size, modified_time)
+            VALUES (?, ?, ?, ?)
         """.trimIndent()
 
         val connection: Connection = getConnection()
@@ -569,6 +647,7 @@ class TmdbRepository(
                 fileStatement.setString(1, file.id)
                 fileStatement.setString(2, file.name)
                 fileStatement.setLong(3, file.size)
+                fileStatement.setLong(4, file.modifiedTime)
                 fileStatement.addBatch()
 
                 episodeStatement.setInt(1, episode.id)
@@ -663,8 +742,8 @@ class TmdbRepository(
 
             // Insert files
             val insertFileQuery = """
-                INSERT INTO files (id, name, size)
-                VALUES (?, ?, ?)
+                INSERT INTO files (id, name, size, modified_time)
+                VALUES (?, ?, ?, ?)
             """.trimIndent()
             fileStatement = connection.prepareStatement(insertFileQuery)
 
@@ -672,6 +751,7 @@ class TmdbRepository(
                 fileStatement.setString(1, file.id)
                 fileStatement.setString(2, file.name)
                 fileStatement.setLong(3, file.size)
+                fileStatement.setLong(4, file.modifiedTime)
                 fileStatement.addBatch()
             }
             println("Executing batch files")
@@ -737,11 +817,11 @@ class TmdbRepository(
     }
 
     override fun getAllMoviesFiles(): List<DriveFile> {
-        return getFiles("SELECT f.id, f.name, f.size FROM files f INNER JOIN movies m ON f.id = m.file_id ORDER BY f.id")
+        return getFiles("SELECT f.id, f.name, f.size, f.modified_time FROM files f INNER JOIN movies m ON f.id = m.file_id ORDER BY f.id")
     }
 
     override fun getAllEpisodesFiles(): List<DriveFile> {
-        return getFiles("SELECT f.id, f.name, f.size FROM files f INNER JOIN episodes e ON f.id = e.file_id ORDER BY f.id")
+        return getFiles("SELECT f.id, f.name, f.size, f.modified_time FROM files f INNER JOIN episodes e ON f.id = e.file_id ORDER BY f.id")
     }
 
     override fun getFileById(id: String): DriveFile? {
@@ -790,7 +870,8 @@ class TmdbRepository(
             resultSet.getInt("id"),
             resultSet.getString("name"),
             resultSet.getString("poster_path"),
-            resultSet.getDouble("vote_average")
+            resultSet.getDouble("vote_average"),
+            resultSet.getLong("modified_time")
         )
     }
 
@@ -820,7 +901,8 @@ class TmdbRepository(
         return DriveFile(
             resultSet.getString("id"),
             resultSet.getString("name"),
-            resultSet.getLong("size")
+            resultSet.getLong("size"),
+            resultSet.getLong("modified_time")
         )
     }
 

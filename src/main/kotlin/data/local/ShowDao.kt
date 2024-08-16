@@ -12,6 +12,7 @@ interface ShowDao {
     fun getShowById(id: Int): Show?
     fun deleteShowById(id: Int)
     fun batchAddShow(shows: List<Show>)
+    fun updateShowsModifiedTime(shows: List<Show>)
 
     fun addSeason(showId: Int, season: Season)
     fun deleteSeason(seasonId: Int)

@@ -50,7 +50,10 @@ class DriveRepository(
         }.awaitAll()
     }
 
-    override fun getFiles(folderId: String, foldersOnly: Boolean): List<File> {
+    override fun getFiles(
+        folderId: String,
+        foldersOnly: Boolean
+    ): List<File> {
         val query = DriveApiQueryBuilder()
             .inParents(folderId)
             .trashed(false)
@@ -85,7 +88,7 @@ class DriveRepository(
             .setPageSize(pageSize)
             .setQ(query)
             .setPageToken(pageToken)
-            .setFields("nextPageToken, files(id, name, size, mimeType)")
+            .setFields("nextPageToken, files(id, name, size, mimeType, modifiedTime)")
             .execute()
     }
 }

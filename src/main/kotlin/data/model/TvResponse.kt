@@ -8,11 +8,12 @@ data class TvResponse(
     val vote_average: Double?,
     val seasons: List<TvSeason>?,
 ) {
-    fun toShow() = Show(
+    fun toShow(modifiedTime: Long) = Show(
         id = id,
         name = name ?: "",
         posterPath = poster_path,
-        voteAverage = vote_average
+        voteAverage = vote_average,
+        modifiedTime = modifiedTime
     )
 }
 
