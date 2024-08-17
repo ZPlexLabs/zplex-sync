@@ -1,5 +1,6 @@
 package zechs.zplex.sync.data.remote
 
+import data.model.ShowExternalIdResponse
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -16,6 +17,14 @@ interface TmdbApi {
         @Query("language")
         language: String = "en-US"
     ): TvResponse
+
+    @GET("3/tv/{tv_id}/external_ids")
+    fun getShowExternalIds(
+        @Path("tv_id")
+        tv_id: Int,
+        @Query("language")
+        language: String = "en-US"
+    ): ShowExternalIdResponse
 
     @GET("3/tv/{tv_id}/season/{season_number}")
     fun getSeason(

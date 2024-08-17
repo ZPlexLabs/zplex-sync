@@ -19,11 +19,15 @@ import zechs.zplex.sync.data.model.Season
 import zechs.zplex.sync.data.model.SeasonResponse
 import zechs.zplex.sync.data.model.Show
 import zechs.zplex.sync.data.model.TvResponse
+import zechs.zplex.sync.data.remote.OmdbApi
 import zechs.zplex.sync.data.remote.TmdbApi
 import zechs.zplex.sync.utils.Constants.Companion.IS_DEBUG
+import zechs.zplex.sync.utils.Constants.Companion.OMDB_API_KEY
+import zechs.zplex.sync.utils.Constants.Companion.OMDB_API_URL
 import zechs.zplex.sync.utils.Constants.Companion.TMDB_API_KEY
 import zechs.zplex.sync.utils.Constants.Companion.TMDB_API_URL
 import zechs.zplex.sync.utils.GoogleDrive
+import zechs.zplex.sync.utils.OmdbApiKeyInterceptor
 import zechs.zplex.sync.utils.SynchronousCallAdapterFactory
 import zechs.zplex.sync.utils.TmdbApiKeyInterceptor
 
@@ -56,8 +60,8 @@ class IndexingService {
                     it.addInterceptor(httpLogging)
                 }
                 it.addInterceptor(TmdbApiKeyInterceptor(TMDB_API_KEY))
-            }
-            .build()
+                it.addInterceptor(OmdbApiKeyInterceptor(OMDB_API_KEY))
+            }.build()
     }
 
     private val tmdbApi by lazy<TmdbApi> {
@@ -68,6 +72,16 @@ class IndexingService {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(TmdbApi::class.java)
+    }
+
+    private val omdbApi by lazy<OmdbApi> {
+        Retrofit.Builder()
+            .baseUrl(OMDB_API_URL)
+            .client(client)
+            .addCallAdapterFactory(SynchronousCallAdapterFactory())
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(OmdbApi::class.java)
     }
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())

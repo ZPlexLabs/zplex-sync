@@ -2,6 +2,7 @@ package zechs.zplex.sync.data.repository
 
 import com.google.api.services.drive.model.File
 import data.model.DriveFile
+import data.model.ShowExternalIdResponse
 import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.ResultSet
@@ -912,6 +913,10 @@ class TmdbRepository(
 
     fun fetchSeason(id: Int, seasonNumber: Int): SeasonResponse {
         return tmdbApi.getSeason(id, seasonNumber)
+    }
+
+    fun fetchShowExternalIds(id: Int): ShowExternalIdResponse {
+        return tmdbApi.getShowExternalIds(id)
     }
 
     fun fetchMovie(id: Int): MovieResponse {
