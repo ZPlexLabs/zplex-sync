@@ -355,6 +355,7 @@ class IndexingService {
             val databaseShows = tmdbRepository.getAllShowsIds()
             val showsActuallyNeedToBeInserted = showsToBeInserted
                 .filter { show -> databaseShows.none { it == show.id } }
+                .distinctBy { it.id }
             println("[DATABASE EXECUTION] ${showsActuallyNeedToBeInserted.size} shows to be inserted.")
             tmdbRepository.batchAddShow(showsActuallyNeedToBeInserted)
         }
@@ -362,6 +363,7 @@ class IndexingService {
             val databaseSeasons = tmdbRepository.getAllSeasonIds()
             val seasonsActuallyNeedToBeInserted = seasonToBeInserted
                 .filter { season -> databaseSeasons.none { it == season.id } }
+                .distinctBy { it.id }
             println("[DATABASE EXECUTION] ${seasonsActuallyNeedToBeInserted.size} seasons to be inserted.")
             tmdbRepository.batchAddSeason(seasonsActuallyNeedToBeInserted)
         }
