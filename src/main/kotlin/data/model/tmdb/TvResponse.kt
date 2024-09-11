@@ -1,4 +1,6 @@
-package zechs.zplex.sync.data.model
+package zechs.zplex.sync.data.model.tmdb
+
+import zechs.zplex.sync.data.model.Show
 
 
 data class TvResponse(

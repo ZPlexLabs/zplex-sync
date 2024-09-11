@@ -1,7 +1,7 @@
 package zechs.zplex.sync.data.local
 
 import com.google.api.services.drive.model.File
-import data.model.DriveFile
+import zechs.zplex.sync.data.model.DriveFile
 
 interface FileDao {
 

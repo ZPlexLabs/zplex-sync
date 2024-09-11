@@ -94,7 +94,114 @@ EXECUTE FUNCTION delete_show_if_no_seasons();
 -- Database Migration: V1 -> V2
 
 -- Add column modified_time to files table
-ALTER TABLE files ADD COLUMN modified_time BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE files
+    ADD COLUMN modified_time BIGINT NOT NULL DEFAULT 0;
 
 -- Add column modified_time to shows table
-ALTER TABLE shows ADD COLUMN modified_time BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE shows
+    ADD COLUMN modified_time BIGINT NOT NULL DEFAULT 0;
+
+
+-- Database Migration: V2 -> V3
+DROP TABLE IF EXISTS movies;
+
+-- Table: movies
+CREATE TABLE movies
+(
+    id              INT    NOT NULL PRIMARY KEY,
+    title           TEXT   NOT NULL,
+    collection_id   INT,
+    file_id         TEXT   NOT NULL,
+    imdb_id         TEXT   NOT NULL,
+    imdb_rating     DOUBLE PRECISION,
+    imdb_votes      INT    NOT NULL,
+    release_date    BIGINT,
+    release_year    BIGINT NOT NULL,
+    parental_rating TEXT,
+    runtime         BIGINT,
+    poster_path     TEXT,
+    backdrop_path   TEXT,
+    logo_image      TEXT,
+    trailer_link    TEXT,
+    tagline         TEXT,
+    plot            TEXT,
+    director        TEXT,
+    genres          INT[]  NOT NULL,
+    studios         INT[]  NOT NULL,
+    FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE
+);
+
+-- Table: casts
+CREATE TABLE casts
+(
+    id     INT  NOT NULL,
+    image  TEXT,
+    name   TEXT NOT NULL,
+    role   TEXT,
+    gender TEXT NOT NULL,
+    FOREIGN KEY (id) REFERENCES movies (id) ON DELETE CASCADE
+);
+
+-- Table: crews
+CREATE TABLE crews
+(
+    id    INT  NOT NULL,
+    image TEXT,
+    name  TEXT NOT NULL,
+    job   TEXT,
+    FOREIGN KEY (id) REFERENCES movies (id) ON DELETE CASCADE
+);
+
+-- Table: genres
+CREATE TABLE genres
+(
+    id   INT  NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL
+);
+
+-- Table: studios
+CREATE TABLE studios
+(
+    id             INT  NOT NULL PRIMARY KEY,
+    logo_path      TEXT,
+    name           TEXT NOT NULL,
+    origin_country TEXT NOT NULL
+);
+
+-- Table: external_links
+CREATE TABLE external_links
+(
+    id   INT  NOT NULL,
+    name TEXT NOT NULL,
+    url  TEXT NOT NULL,
+    FOREIGN KEY (id) REFERENCES movies (id) ON DELETE CASCADE
+);
+
+-- -- Create trigger function to delete related data when a movie is deleted
+CREATE OR REPLACE FUNCTION delete_related_movie_data()
+    RETURNS TRIGGER AS
+$$
+BEGIN
+    -- Delete related cast entries
+    DELETE FROM casts WHERE id = OLD.id;
+
+    -- Delete related crew entries
+    DELETE FROM crews WHERE id = OLD.id;
+
+    -- Delete related studio entries
+    DELETE FROM studios WHERE id = OLD.id;
+
+    -- Delete related external links entries
+    DELETE FROM external_links WHERE id = OLD.id;
+
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- -- Create trigger to delete related data when a movie is deleted
+CREATE TRIGGER delete_related_movie_data_trigger
+    AFTER DELETE
+    ON movies
+    FOR EACH ROW
+EXECUTE FUNCTION delete_related_movie_data();
