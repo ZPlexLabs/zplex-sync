@@ -3,8 +3,6 @@ package zechs.zplex.sync.data.repository
 import com.google.api.services.drive.model.File
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import data.model.DriveFile
-import data.model.DrivePathFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -13,12 +11,14 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import zechs.zplex.sync.data.model.DriveFile
+import zechs.zplex.sync.data.model.DrivePathFile
 import zechs.zplex.sync.data.model.Episode
 import zechs.zplex.sync.data.model.Movie
 import zechs.zplex.sync.data.model.Season
-import zechs.zplex.sync.data.model.SeasonResponse
 import zechs.zplex.sync.data.model.Show
-import zechs.zplex.sync.data.model.TvResponse
+import zechs.zplex.sync.data.model.tmdb.SeasonResponse
+import zechs.zplex.sync.data.model.tmdb.TvResponse
 import zechs.zplex.sync.data.remote.OmdbApi
 import zechs.zplex.sync.data.remote.TmdbApi
 import zechs.zplex.sync.utils.Constants.Companion.IS_DEBUG
@@ -30,6 +30,11 @@ import zechs.zplex.sync.utils.GoogleDrive
 import zechs.zplex.sync.utils.OmdbApiKeyInterceptor
 import zechs.zplex.sync.utils.SynchronousCallAdapterFactory
 import zechs.zplex.sync.utils.TmdbApiKeyInterceptor
+import zechs.zplex.sync.utils.ext.nullIfNA
+import zechs.zplex.sync.utils.ext.nullIfNAOrElse
+import java.text.SimpleDateFormat
+import java.util.*
+
 
 class IndexingService {
 
@@ -93,10 +98,13 @@ class IndexingService {
         scope = coroutineScope
     )
     private val tmdbRepository = TmdbRepository(tmdbApi)
+    private val omdbRepository = OmdbRepository(omdbApi)
 
     operator fun invoke() {
         try {
             println("Indexing service started.")
+            updateGenreList()
+            println()
             indexMovies()
             println()
             indexShows()
@@ -104,6 +112,50 @@ class IndexingService {
         } finally {
             tmdbRepository.disconnect()
         }
+    }
+
+    private fun updateGenreList() {
+        println("Beginning genre synchronization...")
+        try {
+            val existingGenres = tmdbRepository.getAllGenres()
+            val movieGenres = tmdbApi.getMovieGenres().genres
+            val showGenres = tmdbApi.getShowGenres().genres
+
+            // Eliminate existing genres
+            val newMovieGenres = movieGenres.filter { movieGenre ->
+                existingGenres.none { existingGenre -> existingGenre.id == movieGenre.id }
+            }
+
+            val newShowGenres = showGenres.filter { showGenre ->
+                existingGenres.none { existingGenre -> existingGenre.id == showGenre.id }
+            }
+
+            if (newMovieGenres.isEmpty() && newShowGenres.isEmpty()) {
+                println("No new genres found.")
+                return
+            }
+
+            // Prepare 3 lists
+            val uniqueMovieGenres = newMovieGenres.filter { movieGenre ->
+                showGenres.none { showGenre -> showGenre.id == movieGenre.id }
+            }
+
+            val uniqueShowGenres = newShowGenres.filter { showGenre ->
+                movieGenres.none { movieGenre -> movieGenre.id == showGenre.id }
+            }
+
+            val commonGenres = newMovieGenres.filter { movieGenre ->
+                showGenres.any { showGenre -> showGenre.id == movieGenre.id }
+            }
+
+            tmdbRepository.batchAddGenres(uniqueMovieGenres, "movie")
+            tmdbRepository.batchAddGenres(uniqueShowGenres, "show")
+            tmdbRepository.batchAddGenres(commonGenres, "both")
+        } catch (e: Exception) {
+            println("Error updating genre list: ${e.message}")
+            throw e
+        }
+        println("Genre synchronization ended.")
     }
 
     private fun syncFiles(remoteFiles: List<File>, databaseFiles: List<DriveFile>): List<File> {
@@ -190,12 +242,45 @@ class IndexingService {
         println("New movie: ${videoFile.name}, inserting into the database.")
 
         val movieResponse = tmdbRepository.fetchMovie(videoFile.tmdbId)
+        val imdbId = movieResponse.external_ids
+            ?.getOrDefault("imdb_id", null)
+            ?: run {
+                println("[ERROR] IMDB ID not found for - ${movieResponse.title}")
+                return
+            }
+
+        val omdbResponse = omdbRepository.fetchMovieById(imdbId)
+            ?: run {
+                println("[ERROR] OMDB response not found for - ${movieResponse.title}")
+                return
+            }
+
         val movie = Movie(
             id = movieResponse.id,
-            title = movieResponse.title ?: "No title",
+            imdbId = omdbResponse.imdbID,
+            imdbRating = omdbResponse.imdbRating?.let {
+                if (it == "N/A" || it == "Not Rated") null
+                else it.replace(",", "").toDouble()
+            },
+            imdbVotes = omdbResponse.imdbVotes.replace(",", "").toInt(),
+            releaseDate = omdbResponse.Released.nullIfNAOrElse { parseDateToEpoch(it) },
+            releaseYear = omdbResponse.Year.toInt(),
+            parentalRating = omdbResponse.Rated?.nullIfNA(),
+            runtime = omdbResponse.Runtime.nullIfNAOrElse { it.split(" ")[0].toInt() },
             posterPath = movieResponse.poster_path,
-            voteAverage = movieResponse.vote_average,
-            releaseYear = videoFile.year,
+            backdropPath = movieResponse.backdrop_path,
+            logoImage = movieResponse.getBestLogoImage(),
+            trailerLink = movieResponse.getOfficialTrailer(),
+            tagLine = movieResponse.tagline,
+            plot = omdbResponse.Plot,
+            director = movieResponse.getDirectorName(),
+            cast = movieResponse.credits.cast?.map { it.toCast(tmdbId = movieResponse.id) } ?: emptyList(),
+            crew = movieResponse.credits.crew?.map { it.toCrew(tmdbId = movieResponse.id) } ?: emptyList(),
+            genres = movieResponse.genres,
+            studios = movieResponse.production_companies?.map { it.toStudio() } ?: emptyList(),
+            externalLinks = movieResponse.getExternalLinks(),
+            title = omdbResponse.Title,
+            collectionId = movieResponse.belongs_to_collection?.id,
             fileId = videoFile.fileId
         )
         val file = DriveFile(
@@ -441,6 +526,16 @@ class IndexingService {
         } catch (e: Exception) {
             println("Error parsing file name: ${driveFile.name}")
             e.printStackTrace()
+            null
+        }
+    }
+
+    private fun parseDateToEpoch(dateStr: String): Long? {
+        val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
+        return try {
+            val date: Date? = dateFormat.parse(dateStr)
+            date?.time
+        } catch (e: Exception) {
             null
         }
     }

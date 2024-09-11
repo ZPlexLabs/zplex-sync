@@ -1,6 +1,6 @@
 package zechs.zplex.sync.data.local
 
-import data.model.DriveFile
+import zechs.zplex.sync.data.model.DriveFile
 import zechs.zplex.sync.data.model.Episode
 import zechs.zplex.sync.data.model.Season
 import zechs.zplex.sync.data.model.Show

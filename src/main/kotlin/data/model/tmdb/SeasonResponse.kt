@@ -1,4 +1,4 @@
-package zechs.zplex.sync.data.model
+package zechs.zplex.sync.data.model.tmdb
 
 data class SeasonResponse(
     val episodes: List<SeasonEpisode>?,

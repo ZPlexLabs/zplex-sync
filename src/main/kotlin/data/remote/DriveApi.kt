@@ -1,7 +1,7 @@
 package zechs.zplex.sync.data.remote
 
 import com.google.api.services.drive.model.File
-import data.model.DrivePathFile
+import zechs.zplex.sync.data.model.DrivePathFile
 
 interface DriveApi {
 

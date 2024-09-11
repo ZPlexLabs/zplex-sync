@@ -1,25 +1,26 @@
 package zechs.zplex.sync.data.repository
 
 import com.google.api.services.drive.model.File
-import data.model.DriveFile
-import data.model.ShowExternalIdResponse
-import java.sql.Connection
-import java.sql.PreparedStatement
-import java.sql.ResultSet
-import java.sql.SQLException
 import zechs.zplex.sync.data.local.Database
 import zechs.zplex.sync.data.local.FileDao
 import zechs.zplex.sync.data.local.MovieDao
 import zechs.zplex.sync.data.local.ShowDao
+import zechs.zplex.sync.data.model.DriveFile
 import zechs.zplex.sync.data.model.Episode
+import zechs.zplex.sync.data.model.Genre
 import zechs.zplex.sync.data.model.Movie
-import zechs.zplex.sync.data.model.MovieResponse
 import zechs.zplex.sync.data.model.Season
-import zechs.zplex.sync.data.model.SeasonResponse
 import zechs.zplex.sync.data.model.Show
-import zechs.zplex.sync.data.model.TvResponse
+import zechs.zplex.sync.data.model.tmdb.MovieResponse
+import zechs.zplex.sync.data.model.tmdb.SeasonResponse
+import zechs.zplex.sync.data.model.tmdb.TvResponse
 import zechs.zplex.sync.data.remote.TmdbApi
 import zechs.zplex.sync.utils.DatabaseConnector
+import java.sql.Array
+import java.sql.Connection
+import java.sql.PreparedStatement
+import java.sql.ResultSet
+import java.sql.SQLException
 
 class TmdbRepository(
     private val tmdbApi: TmdbApi
@@ -32,6 +33,65 @@ class TmdbRepository(
     init {
         connect()
         displayStatistics()
+    }
+
+    fun getAllGenres(): List<Genre> {
+        val genres = mutableListOf<Genre>()
+        val query = "SELECT * FROM genres ORDER BY id"
+        try {
+            getConnection().createStatement().use { statement ->
+                statement.executeQuery(query).use { resultSet ->
+                    resultSet?.let {
+                        while (resultSet.next()) {
+                            genres.add(parseResultSetForGenre(it))
+                        }
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            println("Error occurred while retrieving genres: ${e.message}")
+        }
+        return genres
+    }
+
+    fun batchAddGenres(genres: List<Genre>, type: String) {
+        val connection = getConnection()
+        var insertGenreStmt: PreparedStatement? = null
+        try {
+            println("Transaction started.")
+            connection.autoCommit = false // Start transaction
+            println("Inserting ${genres.size} genres for $type into the database.")
+
+            val insertGenreSQL = """
+            INSERT INTO genres (id, name, type) 
+            VALUES (?, ?, ?)
+            ON CONFLICT DO NOTHING 
+            """.trimIndent()
+            insertGenreStmt = connection.prepareStatement(insertGenreSQL)
+            genres.forEach { genre ->
+                insertGenreStmt.apply {
+                    setInt(1, genre.id)
+                    setString(2, genre.name)
+                    setString(3, type)
+                    addBatch()
+                    clearParameters()
+                }
+            }
+            insertGenreStmt.executeBatch()
+            connection.commit()
+            println("Transaction committed successfully")
+        } catch (e: SQLException) {
+            connection.rollback()
+            e.printStackTrace()
+        } finally {
+            try {
+                insertGenreStmt?.close()
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            } finally {
+                connection.autoCommit = true
+            }
+        }
     }
 
     /**
@@ -66,107 +126,160 @@ class TmdbRepository(
 
     override fun upsertMovie(movie: Movie, file: DriveFile) {
         val connection = getConnection()
-        var fileStatement: PreparedStatement? = null
-        var movieStatement: PreparedStatement? = null
 
-        val insertFileQuery = """
-            INSERT INTO files (id, name, size, modified_time)
-            VALUES (?, ?, ?, ?)
-        """.trimIndent()
-
-        val insertMovieQuery = """
-            INSERT INTO movies (id, title, poster_path, vote_average, year, file_id)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """.trimIndent()
+        var insertMovieStmt: PreparedStatement? = null
+        var insertFileStmt: PreparedStatement? = null
+        var insertStudioStmt: PreparedStatement? = null
+        var insertCastStmt: PreparedStatement? = null
+        var insertCrewStmt: PreparedStatement? = null
+        var insertExternalLinkStmt: PreparedStatement? = null
 
         try {
             println("Transaction started.")
-            println("Inserting ${movie.title} with file ${file.name} into the database.")
-            connection.autoCommit = false
+            connection.autoCommit = false // Start transaction
+            println("Inserting ${movie.title} with file id ${file.id} into the database.")
 
-            // Insert data into the files table
-            fileStatement = connection.prepareStatement(insertFileQuery)
-            fileStatement.setString(1, file.id)
-            fileStatement.setString(2, file.name)
-            fileStatement.setLong(3, file.size)
-            fileStatement.setLong(4, file.modifiedTime)
-            fileStatement.executeUpdate()
-
-            movieStatement = connection.prepareStatement(insertMovieQuery)
-            movieStatement.setInt(1, movie.id)
-            movieStatement.setString(2, movie.title)
-            movieStatement.setString(3, movie.posterPath)
-            movieStatement.setDouble(4, movie.voteAverage ?: 0.0)
-            movieStatement.setInt(5, movie.releaseYear)
-            movieStatement.setString(6, file.id)
-            movieStatement.executeUpdate()
-
-            connection.commit()
-            println("Transaction committed successfully.")
-        } catch (e: SQLException) {
-            try {
-                connection.rollback() // Rollback the transaction if an error occurs
-                println("Transaction rolled back due to an error.")
-            } catch (ex: SQLException) {
-                ex.printStackTrace()
+            // ======= INSERT files =======
+            val insertFileSQL = """
+            INSERT INTO files (id, name, size, modified_time)
+            VALUES (?, ?, ?, ?)
+            """.trimIndent()
+            insertFileStmt = connection.prepareStatement(insertFileSQL).apply {
+                setString(1, file.id)
+                setString(2, file.name)
+                setLong(3, file.size)
+                setLong(4, file.modifiedTime)
             }
+            insertFileStmt.executeUpdate()
+
+            // ======= INSERT studios =======
+            val insertStudioSQL = """
+            INSERT INTO studios (id, logo_path, name, origin_country) 
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT DO NOTHING 
+            """.trimIndent()
+            insertStudioStmt = connection.prepareStatement(insertStudioSQL)
+            movie.studios.forEach { studio ->
+                insertStudioStmt.apply {
+                    setInt(1, studio.id)
+                    setObject(2, studio.logo)
+                    setString(3, studio.name)
+                    setString(4, studio.country)
+                    addBatch()
+                    clearParameters()
+                }
+            }
+            insertStudioStmt.executeBatch()
+
+            // ======= INSERT movies =======
+            val insertMovieSQL = """
+            INSERT INTO movies (
+                id, title, collection_id, file_id, imdb_id, imdb_rating, imdb_votes, release_date, release_year,
+                parental_rating, runtime, poster_path, backdrop_path, logo_image, trailer_link, tagline, plot,
+                director, genres, studios
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+            insertMovieStmt = connection.prepareStatement(insertMovieSQL).apply {
+                setInt(1, movie.id)
+                setString(2, movie.title)
+                setObject(3, movie.collectionId)
+                setString(4, movie.fileId)
+                setString(5, movie.imdbId)
+                setObject(6, movie.imdbRating)
+                setObject(7, movie.imdbVotes)
+                setObject(8, movie.releaseDate)
+                setInt(9, movie.releaseYear)
+                setObject(10, movie.parentalRating)
+                setObject(11, movie.runtime)
+                setObject(12, movie.posterPath)
+                setObject(13, movie.backdropPath)
+                setObject(14, movie.logoImage)
+                setObject(15, movie.trailerLink)
+                setObject(16, movie.tagLine)
+                setObject(17, movie.plot)
+                setObject(18, movie.director)
+                setObject(19, createIntegerArray(movie.genres.map { genre -> genre.id }))
+                setArray(20, createIntegerArray(movie.studios.map { studio -> studio.id }))
+            }
+            insertMovieStmt.executeUpdate()
+
+            // ======= INSERT casts =======
+            val insertCastSQL = """
+            INSERT INTO casts (id, image, name, role, gender)
+            VALUES (?, ?, ?, ?, ?)
+            """.trimIndent()
+            insertCastStmt = connection.prepareStatement(insertCastSQL)
+            movie.cast.forEach { cast ->
+                insertCastStmt.apply {
+                    setInt(1, cast.id)
+                    setObject(2, cast.image)
+                    setString(3, cast.name)
+                    setObject(4, cast.role)
+                    setString(5, cast.gender.name)
+                    addBatch()
+                    clearParameters()
+                }
+            }
+            insertCastStmt.executeBatch()
+
+            // ======= INSERT crews =======
+            val insertCrewSQL = """
+            INSERT INTO crews (id, image, name, job)
+            VALUES (?, ?, ?, ?)
+            """.trimIndent()
+            insertCrewStmt = connection.prepareStatement(insertCrewSQL)
+            movie.crew.forEach { crew ->
+                insertCrewStmt.apply {
+                    setInt(1, crew.id)
+                    setObject(2, crew.image)
+                    setString(3, crew.name)
+                    setObject(4, crew.job)
+                    addBatch()
+                    clearParameters()
+                }
+            }
+            insertCrewStmt.executeBatch()
+
+            // ======= INSERT external links =======
+            val insertExternalLinkSQL = """
+            INSERT INTO external_links (id, name, url)
+            VALUES (?, ?, ?)
+            """.trimIndent()
+            insertExternalLinkStmt = connection.prepareStatement(insertExternalLinkSQL)
+            movie.externalLinks.forEach { link ->
+                insertExternalLinkStmt.apply {
+                    setInt(1, link.id)
+                    setString(2, link.name)
+                    setString(3, link.url)
+                    addBatch()
+                    clearParameters()
+                }
+            }
+            insertExternalLinkStmt.executeBatch()
+            connection.commit()
+
+            println("Transaction committed successfully")
+        } catch (e: SQLException) {
+            connection.rollback()
             e.printStackTrace()
         } finally {
-            fileStatement?.close()
-            movieStatement?.close()
-            connection.autoCommit = true
+            try {
+                insertMovieStmt?.close()
+                insertFileStmt?.close()
+                insertStudioStmt?.close()
+                insertCastStmt?.close()
+                insertCrewStmt?.close()
+                insertExternalLinkStmt?.close()
+            } catch (ex: SQLException) {
+                ex.printStackTrace()
+            } finally {
+                connection.autoCommit = true
+            }
         }
     }
 
-    override fun getAllMovies(): List<Movie> {
-        val movies = mutableListOf<Movie>()
-        val query = "SELECT * FROM movies ORDER BY id"
-        try {
-            getConnection().createStatement().use { statement ->
-                statement.executeQuery(query).use { resultSet ->
-                    resultSet?.let {
-                        while (resultSet.next()) {
-                            movies.add(parseResultSetForMovie(it))
-                        }
-                    }
-                }
-            }
-        } catch (e: SQLException) {
-            println("Error occurred while retrieving movies: ${e.message}")
-        }
-        return movies
-    }
-
-    override fun getMovieById(id: Int): Movie? {
-        val query = "SELECT * FROM movies WHERE id = ? LIMIT 1"
-        try {
-            getConnection().prepareStatement(query).use { statement ->
-                statement.setInt(1, id)
-                statement.executeQuery().use { resultSet ->
-                    resultSet?.let {
-                        if (resultSet.next()) {
-                            return parseResultSetForMovie(resultSet)
-                        }
-                    }
-                }
-            }
-        } catch (e: SQLException) {
-            println("Error occurred while retrieving movie by id: ${e.message}")
-        }
-        return null
-    }
-
-    override fun deleteMovieById(id: Int) {
-        val query = "DELETE FROM movies WHERE id = ?"
-        try {
-            getConnection().prepareStatement(query).use { statement ->
-                statement.setInt(1, id)
-                statement.executeUpdate()
-            }
-            println("Movie deleted: $id")
-        } catch (e: SQLException) {
-            println("Error occurred while deleting movie: ${e.message}")
-        }
+    private fun createIntegerArray(list: List<Int>): Array {
+        return getConnection().createArrayOf("INTEGER", list.toTypedArray())
     }
 
     override fun updateModifiedTime(files: List<File>) {
@@ -855,17 +968,6 @@ class TmdbRepository(
         }
     }
 
-    private fun parseResultSetForMovie(resultSet: ResultSet): Movie {
-        return Movie(
-            resultSet.getInt("id"),
-            resultSet.getString("title"),
-            resultSet.getString("poster_path"),
-            resultSet.getDouble("vote_average"),
-            resultSet.getInt("year"),
-            resultSet.getString("file_id")
-        )
-    }
-
     private fun parseResultSetForShow(resultSet: ResultSet): Show {
         return Show(
             resultSet.getInt("id"),
@@ -907,20 +1009,25 @@ class TmdbRepository(
         )
     }
 
+    private fun parseResultSetForGenre(resultSet: ResultSet): Genre {
+        return Genre(
+            resultSet.getInt("id"),
+            resultSet.getString("name")
+        )
+    }
+
     fun fetchShow(id: Int): TvResponse {
-        return tmdbApi.getShow(id)
+        val extras = listOf("images", "external_ids", "credits", "videos")
+        return tmdbApi.getShow(id, append_to_response = extras.joinToString(","))
     }
 
     fun fetchSeason(id: Int, seasonNumber: Int): SeasonResponse {
         return tmdbApi.getSeason(id, seasonNumber)
     }
 
-    fun fetchShowExternalIds(id: Int): ShowExternalIdResponse {
-        return tmdbApi.getShowExternalIds(id)
-    }
-
     fun fetchMovie(id: Int): MovieResponse {
-        return tmdbApi.getMovie(id)
+        val extras = listOf("images", "external_ids", "credits", "videos")
+        return tmdbApi.getMovie(id, append_to_response = extras.joinToString(","))
     }
 
     override fun connect() {
