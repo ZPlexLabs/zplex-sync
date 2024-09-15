@@ -258,10 +258,7 @@ class IndexingService {
         val movie = Movie(
             id = movieResponse.id,
             imdbId = omdbResponse.imdbID,
-            imdbRating = omdbResponse.imdbRating?.let {
-                if (it == "N/A" || it == "Not Rated") null
-                else it.replace(",", "").toDouble()
-            },
+            imdbRating = omdbResponse.imdbRating?.nullIfNAOrElse { it.replace(",", "").toDouble() },
             imdbVotes = omdbResponse.imdbVotes.replace(",", "").toInt(),
             releaseDate = omdbResponse.Released.nullIfNAOrElse { parseDateToEpoch(it) },
             releaseYear = omdbResponse.Year.toInt(),
