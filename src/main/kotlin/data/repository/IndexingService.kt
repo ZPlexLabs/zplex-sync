@@ -107,7 +107,7 @@ class IndexingService {
             println("Indexing service started.")
             updateGenreList()
             println()
-            // indexMovies()
+            indexMovies()
             println()
             indexShows()
             println("Indexing service ended.")
