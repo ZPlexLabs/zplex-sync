@@ -27,9 +27,8 @@ data class MovieResponse(
         return videos.results
             ?.filter { it.type == "Trailer" && it.site == "YouTube" }
             ?.sortedByDescending { it.official }
-            ?.maxByOrNull {
-                Instant.parse(it.published_at).toEpochMilli()
-            }?.key
+            ?.maxByOrNull { Instant.parse(it.published_at).toEpochMilli() }
+            ?.key
     }
 
     fun getDirectorName(): String? {
