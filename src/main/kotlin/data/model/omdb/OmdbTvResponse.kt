@@ -14,4 +14,11 @@ data class OmdbTvResponse(
     val Title: String,
     val Type: String,
     val Year: String
-)
+) {
+    fun getLatestYear(): Int? {
+        return Year
+            .substringAfter("–", "")
+            .takeIf { it.isNotBlank() }
+            ?.toIntOrNull() ?: if (Year.contains("-")) Integer.MAX_VALUE else null
+    }
+}

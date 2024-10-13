@@ -188,7 +188,7 @@ class TmdbRepository(
                 setObject(6, movie.imdbRating)
                 setObject(7, movie.imdbVotes)
                 setObject(8, movie.releaseDate)
-                setInt(9, movie.releaseYear)
+                setObject(9, movie.releaseYear)
                 setObject(10, movie.parentalRating)
                 setObject(11, movie.runtime)
                 setObject(12, movie.posterPath)
@@ -205,7 +205,7 @@ class TmdbRepository(
 
             // ======= INSERT casts =======
             val insertCastSQL = """
-            INSERT INTO casts (id, image, name, role, gender)
+            INSERT INTO movie_casts (id, image, name, role, gender)
             VALUES (?, ?, ?, ?, ?)
             """.trimIndent()
             insertCastStmt = connection.prepareStatement(insertCastSQL)
@@ -224,7 +224,7 @@ class TmdbRepository(
 
             // ======= INSERT crews =======
             val insertCrewSQL = """
-            INSERT INTO crews (id, image, name, job)
+            INSERT INTO movie_crews (id, image, name, job)
             VALUES (?, ?, ?, ?)
             """.trimIndent()
             insertCrewStmt = connection.prepareStatement(insertCrewSQL)
@@ -242,7 +242,7 @@ class TmdbRepository(
 
             // ======= INSERT external links =======
             val insertExternalLinkSQL = """
-            INSERT INTO external_links (id, name, url)
+            INSERT INTO movie_external_links (id, name, url)
             VALUES (?, ?, ?)
             """.trimIndent()
             insertExternalLinkStmt = connection.prepareStatement(insertExternalLinkSQL)
@@ -320,85 +320,212 @@ class TmdbRepository(
 
     override fun upsertShow(show: Show, seasons: List<Season>, episodes: List<Episode>, files: List<DriveFile>) {
         val connection: Connection = getConnection()
-        val fileStatement: PreparedStatement?
-        var showStatement: PreparedStatement? = null
-        var seasonStatement: PreparedStatement? = null
-        var episodeStatement: PreparedStatement? = null
+
+        var insertShowStmt: PreparedStatement? = null
+        var insertFileStmt: PreparedStatement? = null
+        var insertStudioStmt: PreparedStatement? = null
+        var insertCastStmt: PreparedStatement? = null
+        var insertCrewStmt: PreparedStatement? = null
+        var insertExternalLinkStmt: PreparedStatement? = null
+        var insertSeasonStmt: PreparedStatement? = null
+        var insertEpisodeStmt: PreparedStatement? = null
 
         try {
+            println("Transaction started.")
             connection.autoCommit = false // Start a transaction
 
-            println("Starting upsertShow method")
+            println("Inserting ${show.title} with ${seasons.size} seasons and ${episodes.size} episodes into the database.")
 
-            val insertFileQuery = """
-                INSERT INTO files (id, name, size, modified_time)
-                VALUES (?, ?, ?, ?)
+            // ======= INSERT files =======
+            val insertFileSQL = """
+            INSERT INTO files (id, name, size, modified_time)
+            VALUES (?, ?, ?, ?)
             """.trimIndent()
-
-            fileStatement = connection.prepareStatement(insertFileQuery)
+            insertFileStmt = connection.prepareStatement(insertFileSQL)
 
             files.forEach { file ->
-                fileStatement.setString(1, file.id)
-                fileStatement.setString(2, file.name)
-                fileStatement.setLong(3, file.size)
-                fileStatement.setLong(4, file.modifiedTime)
-                fileStatement.executeUpdate()
+                insertFileStmt.apply {
+                    setString(1, file.id)
+                    setString(2, file.name)
+                    setLong(3, file.size)
+                    setLong(4, file.modifiedTime)
+                    addBatch()
+                    clearParameters()
+                }
             }
+            insertFileStmt.executeBatch()
 
-            // Insert or update the show
-            val showQuery = """
-                INSERT INTO shows (id, name, poster_path, vote_average, modified_time)
-                VALUES (?, ?, ?, ?, ?)
+            // ======= INSERT studios =======
+            val insertStudioSQL = """
+            INSERT INTO studios (id, logo_path, name, origin_country) 
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT DO NOTHING 
+            """.trimIndent()
+            insertStudioStmt = connection.prepareStatement(insertStudioSQL)
+            show.studios.forEach { studio ->
+                insertStudioStmt.apply {
+                    setInt(1, studio.id)
+                    setObject(2, studio.logo)
+                    setString(3, studio.name)
+                    setString(4, studio.country)
+                    addBatch()
+                    clearParameters()
+                }
+            }
+            insertStudioStmt.executeBatch()
+
+            // ======= INSERT shows =======
+            val insertShowSQL = """
+            INSERT INTO shows (
+                id, title, imdb_id, imdb_rating, imdb_votes, release_date, release_year, release_year_to,
+                parental_rating, poster_path, backdrop_path, logo_image, trailer_link, plot,
+                director, genres, studios, modified_time
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO NOTHING
+            """.trimIndent()
+            insertShowStmt = connection.prepareStatement(insertShowSQL).apply {
+                setInt(1, show.id)
+                setString(2, show.title)
+                setString(3, show.imdbId)
+                setObject(4, show.imdbRating)
+                setObject(5, show.imdbVotes)
+                setObject(6, show.releaseDate)
+                setInt(7, show.releasedYear)
+                setObject(8, show.releaseYearTo)
+                setObject(9, show.parentalRating)
+                setObject(10, show.posterPath)
+                setObject(11, show.backdropPath)
+                setObject(12, show.logoImage)
+                setObject(13, show.trailerLink)
+                setObject(14, show.plot)
+                setObject(15, show.director)
+                setObject(16, createIntegerArray(show.genres.map { genre -> genre.id }))
+                setArray(17, createIntegerArray(show.studios.map { studio -> studio.id }))
+                setLong(18, show.modifiedTime)
+            }
+            insertShowStmt.executeUpdate()
+
+            // ======= INSERT seasons =======
+            val insertSeasonSQL = """
+                INSERT INTO seasons (
+                id, name, season_number, release_date, release_year, poster_path, show_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO NOTHING
             """.trimIndent()
-            showStatement = connection.prepareStatement(showQuery)
-            showStatement.setInt(1, show.id)
-            showStatement.setString(2, show.name)
-            showStatement.setString(3, show.posterPath)
-            showStatement.setDouble(4, show.voteAverage ?: 0.0)
-            showStatement.setLong(5, show.modifiedTime)
-            println("Executing showStatement: $showStatement")
-            showStatement.executeUpdate()
-            println("Show inserted or updated successfully")
+            insertSeasonStmt = connection.prepareStatement(insertSeasonSQL)
+            seasons.forEach { season ->
+                insertSeasonStmt.apply {
+                    setInt(1, season.id)
+                    setString(2, season.name)
+                    setInt(3, season.seasonNumber)
+                    setObject(4, season.releaseDate)
+                    setObject(5, season.releaseYear)
+                    setString(6, season.posterPath)
+                    setInt(7, season.showId)
+                    addBatch()
+                    clearParameters()
+                }
+            }
+            insertSeasonStmt.executeBatch()
 
-            // Insert seasons
-            val seasonQuery = """
-                INSERT INTO seasons (id, name, poster_path, season_number, show_id)
+            // ======= INSERT episodes =======
+            val insertEpisodeSQL = """
+                INSERT INTO episodes (
+                id, title, episode_number, season_number, overview, runtime, airdate, still_path, season_id, file_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+            insertEpisodeStmt = connection.prepareStatement(insertEpisodeSQL)
+            episodes.forEach { episode ->
+                insertEpisodeStmt.apply {
+                    setInt(1, episode.id)
+                    setString(2, episode.title)
+                    setInt(3, episode.episodeNumber)
+                    setInt(4, episode.seasonNumber)
+                    setObject(5, episode.overview)
+                    setObject(6, episode.runtime)
+                    setObject(7, episode.airdate)
+                    setString(8, episode.stillPath)
+                    setInt(9, episode.seasonId)
+                    setString(10, episode.fileId)
+                    addBatch()
+                    clearParameters()
+                }
+            }
+            insertEpisodeStmt.executeBatch()
+
+            // ======= INSERT casts =======
+            if (getRowCountForShow(show.id, "show_casts") != show.cast.size) {
+                val deleteCastSQL = "DELETE FROM show_casts WHERE id = ?"
+                val deleteCastStmt = connection.prepareStatement(deleteCastSQL)
+                deleteCastStmt.setInt(1, show.id)
+                deleteCastStmt.executeUpdate()
+
+                val insertCastSQL = """
+                INSERT INTO show_casts (id, image, name, role, gender)
                 VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT (id) DO NOTHING
-            """.trimIndent()
-            seasonStatement = connection.prepareStatement(seasonQuery)
-            for (season in seasons) {
-                seasonStatement.setInt(1, season.id)
-                seasonStatement.setString(2, season.name)
-                seasonStatement.setString(3, season.posterPath)
-                seasonStatement.setInt(4, season.seasonNumber)
-                seasonStatement.setInt(5, season.showId)
-                seasonStatement.addBatch()
+                """.trimIndent()
+                insertCastStmt = connection.prepareStatement(insertCastSQL)
+                show.cast.forEach { cast ->
+                    insertCastStmt.apply {
+                        setInt(1, cast.id)
+                        setObject(2, cast.image)
+                        setString(3, cast.name)
+                        setObject(4, cast.role)
+                        setString(5, cast.gender.name)
+                        addBatch()
+                        clearParameters()
+                    }
+                }
+                insertCastStmt.executeBatch()
             }
-            println("Executing seasonStatement: $seasonStatement")
-            seasonStatement.executeBatch()
-            println("Seasons inserted successfully")
 
-            // Insert episodes
-            val episodeQuery = """
-                INSERT INTO episodes (id, title, episode_number, season_number, still_path, season_id, file_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent()
-            episodeStatement = connection.prepareStatement(episodeQuery)
-            for (episode in episodes) {
-                episodeStatement.setInt(1, episode.id)
-                episodeStatement.setString(2, episode.title)
-                episodeStatement.setInt(3, episode.episodeNumber)
-                episodeStatement.setInt(4, episode.seasonNumber)
-                episodeStatement.setString(5, episode.stillPath)
-                episodeStatement.setInt(6, episode.seasonId)
-                episodeStatement.setString(7, episode.fileId)
-                episodeStatement.addBatch()
+            // ======= INSERT crews =======
+            if (getRowCountForShow(show.id, "show_crews") != show.cast.size) {
+                val deleteCastSQL = "DELETE FROM show_crews WHERE id = ?"
+                val deleteCastStmt = connection.prepareStatement(deleteCastSQL)
+                deleteCastStmt.setInt(1, show.id)
+                deleteCastStmt.executeUpdate()
+
+                val insertCrewSQL = """
+                INSERT INTO show_crews (id, image, name, job)
+                VALUES (?, ?, ?, ?)
+                """.trimIndent()
+                insertCrewStmt = connection.prepareStatement(insertCrewSQL)
+                show.crew.forEach { crew ->
+                    insertCrewStmt.apply {
+                        setInt(1, crew.id)
+                        setObject(2, crew.image)
+                        setString(3, crew.name)
+                        setObject(4, crew.job)
+                        addBatch()
+                        clearParameters()
+                    }
+                }
+                insertCrewStmt.executeBatch()
             }
-            println("Executing episodeStatement: $episodeStatement")
-            episodeStatement.executeBatch()
-            println("Episodes inserted successfully")
+
+            // ======= INSERT external links =======
+            if (getRowCountForShow(show.id, "show_external_links") != show.cast.size) {
+                val deleteCastSQL = "DELETE FROM show_external_links WHERE id = ?"
+                val deleteCastStmt = connection.prepareStatement(deleteCastSQL)
+                deleteCastStmt.setInt(1, show.id)
+                deleteCastStmt.executeUpdate()
+                val insertExternalLinkSQL = """
+                INSERT INTO show_external_links (id, name, url)
+                VALUES (?, ?, ?)
+                """.trimIndent()
+                insertExternalLinkStmt = connection.prepareStatement(insertExternalLinkSQL)
+                show.externalLinks.forEach { link ->
+                    insertExternalLinkStmt.apply {
+                        setInt(1, link.id)
+                        setString(2, link.name)
+                        setString(3, link.url)
+                        addBatch()
+                        clearParameters()
+                    }
+                }
+                insertExternalLinkStmt.executeBatch()
+            }
 
             connection.commit()
             println("Transaction committed successfully")
@@ -407,13 +534,19 @@ class TmdbRepository(
             e.printStackTrace()
         } finally {
             try {
-                showStatement?.close()
-                seasonStatement?.close()
-                episodeStatement?.close()
+                insertShowStmt?.close()
+                insertSeasonStmt?.close()
+                insertEpisodeStmt?.close()
+                insertFileStmt?.close()
+                insertStudioStmt?.close()
+                insertCastStmt?.close()
+                insertCrewStmt?.close()
+                insertExternalLinkStmt?.close()
             } catch (ex: SQLException) {
                 ex.printStackTrace()
+            } finally {
+                connection.autoCommit = true
             }
-            connection.autoCommit = true
         }
     }
 
@@ -425,7 +558,7 @@ class TmdbRepository(
                 statement.executeQuery(query).use { resultSet ->
                     resultSet?.let {
                         while (resultSet.next()) {
-                            shows.add(parseResultSetForShow(it))
+                            // shows.add(parseResultSetForShow(it))
                         }
                     }
                 }
@@ -436,97 +569,6 @@ class TmdbRepository(
         return shows
     }
 
-    override fun getAllShowsIds(): List<Int> {
-        val showIds = mutableListOf<Int>()
-        val query = "SELECT id FROM shows ORDER BY id"
-        try {
-            getConnection().createStatement().use { statement ->
-                statement.executeQuery(query).use { resultSet ->
-                    resultSet?.let {
-                        while (resultSet.next()) {
-                            showIds.add(resultSet.getInt("id"))
-                        }
-                    }
-                }
-            }
-        } catch (e: SQLException) {
-            println("Error occurred while retrieving shows: ${e.message}")
-        }
-        return showIds
-    }
-
-
-    override fun getShowById(id: Int): Show? {
-        val query = "SELECT * FROM shows WHERE id = ? LIMIT 1"
-        try {
-            getConnection().prepareStatement(query).use { statement ->
-                statement.setInt(1, id)
-                statement.executeQuery().use { resultSet ->
-                    if (resultSet.next()) {
-                        resultSet?.let { return parseResultSetForShow(resultSet) }
-                    }
-                }
-            }
-        } catch (e: SQLException) {
-            println("Error occurred while retrieving show by id: ${e.message}")
-            throw e
-        }
-        return null
-    }
-
-    override fun deleteShowById(id: Int) {
-        val query = "DELETE FROM shows WHERE id = ?"
-        try {
-            getConnection().prepareStatement(query).use { statement ->
-                statement.setInt(1, id)
-                statement.executeUpdate()
-            }
-            println("Show deleted: $id")
-        } catch (e: SQLException) {
-            println("Error occurred while deleting show: ${e.message}")
-        }
-    }
-
-    override fun batchAddShow(shows: List<Show>) {
-        val connection: Connection = getConnection()
-        var showStatement: PreparedStatement? = null
-
-        try {
-            connection.autoCommit = false // Start a transaction
-
-            println("Starting batchAddShow method for ${shows.size} shows")
-
-            // Insert or update the show
-            val showQuery = """
-                INSERT INTO shows (id, name, poster_path, vote_average, modified_time)
-                VALUES (?, ?, ?, ?, ?)
-            """.trimIndent()
-            showStatement = connection.prepareStatement(showQuery)
-
-            shows.forEach { show ->
-                showStatement.setInt(1, show.id)
-                showStatement.setString(2, show.name)
-                showStatement.setString(3, show.posterPath)
-                showStatement.setDouble(4, show.voteAverage ?: 0.0)
-                showStatement.setLong(5, show.modifiedTime)
-                showStatement.addBatch()
-            }
-            showStatement.executeBatch()
-            println("Show inserted or updated successfully")
-            connection.commit()
-            println("Transaction committed successfully")
-        } catch (e: SQLException) {
-            connection.rollback()
-            e.printStackTrace()
-        } finally {
-            try {
-                showStatement?.close()
-            } catch (ex: SQLException) {
-                ex.printStackTrace()
-            }
-            connection.autoCommit = true
-        }
-    }
 
     override fun updateShowsModifiedTime(shows: List<Show>) {
         val queryUpdateShow = """
@@ -564,76 +606,6 @@ class TmdbRepository(
         }
     }
 
-    override fun addSeason(showId: Int, season: Season) {
-        val query = """
-            INSERT INTO seasons (id, name, poster_path, season_number, show_id)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT (id) DO NOTHING
-        """.trimIndent()
-        try {
-            getConnection().prepareStatement(query).use { statement ->
-                statement.setInt(1, season.id)
-                statement.setString(2, season.name)
-                statement.setString(3, season.posterPath)
-                statement.setInt(4, season.seasonNumber)
-                statement.setInt(5, showId)
-                statement.executeUpdate()
-            }
-            println("Season inserted: ${season.name}")
-        } catch (e: SQLException) {
-            println("Error occurred while inserting season: ${e.message}")
-        }
-    }
-
-    override fun deleteSeason(seasonId: Int) {
-        val query = "DELETE FROM seasons WHERE id = ?"
-        try {
-            getConnection().prepareStatement(query).use { statement ->
-                statement.setInt(1, seasonId)
-                statement.executeUpdate()
-            }
-            println("Season deleted: $seasonId")
-        } catch (e: SQLException) {
-            println("Error occurred while deleting season: ${e.message}")
-        }
-    }
-
-    override fun getSeasons(showId: Int): List<Season> {
-        val seasons = mutableListOf<Season>()
-        val query = "SELECT * FROM seasons WHERE show_id = ? ORDER BY season_number"
-        try {
-            getConnection().prepareStatement(query).use { statement ->
-                statement.setInt(1, showId)
-                statement.executeQuery().use { resultSet ->
-                    resultSet?.let {
-                        while (resultSet.next()) {
-                            seasons.add(parseResultSetForSeason(it))
-                        }
-                    }
-                }
-            }
-        } catch (e: SQLException) {
-            println("Error occurred while retrieving seasons: ${e.message}")
-        }
-        return seasons
-    }
-
-    override fun getSeasonById(seasonId: Int): Season? {
-        val query = "SELECT * FROM seasons WHERE id = ? LIMIT 1"
-        try {
-            getConnection().prepareStatement(query).use { statement ->
-                statement.setInt(1, seasonId)
-                statement.executeQuery().use { resultSet ->
-                    if (resultSet.next()) {
-                        resultSet?.let { return parseResultSetForSeason(resultSet) }
-                    }
-                }
-            }
-        } catch (e: SQLException) {
-            println("Error occurred while retrieving season by id: ${e.message}")
-        }
-        return null
-    }
 
     override fun getAllSeasonIds(): List<Int> {
         val seasonIds = mutableListOf<Int>()
@@ -652,260 +624,6 @@ class TmdbRepository(
             println("Error occurred while retrieving shows: ${e.message}")
         }
         return seasonIds
-    }
-
-    override fun batchAddSeason(seasons: List<Season>) {
-        val connection: Connection = getConnection()
-        var seasonStatement: PreparedStatement? = null
-
-        try {
-            connection.autoCommit = false // Start a transaction
-
-            println("Starting batchAddSeason method for ${seasons.size} seasons")
-
-            // Insert or update the seasons
-            val seasonQuery = """
-                INSERT INTO seasons (id, name, poster_path, season_number, show_id)
-                VALUES (?, ?, ?, ?, ?)
-            """.trimIndent()
-            seasonStatement = connection.prepareStatement(seasonQuery)
-            seasons.forEach { season ->
-                seasonStatement.setInt(1, season.id)
-                seasonStatement.setString(2, season.name)
-                seasonStatement.setString(3, season.posterPath)
-                seasonStatement.setInt(4, season.seasonNumber)
-                seasonStatement.setInt(5, season.showId)
-                seasonStatement.addBatch()
-            }
-            seasonStatement.executeBatch()
-            println("Seasons inserted or updated successfully")
-            connection.commit()
-            println("Transaction committed successfully")
-        } catch (e: SQLException) {
-            connection.rollback()
-            e.printStackTrace()
-        } finally {
-            try {
-                seasonStatement?.close()
-            } catch (ex: SQLException) {
-                ex.printStackTrace()
-            }
-            connection.autoCommit = true
-        }
-    }
-
-    override fun addEpisode(seasonId: Int, episode: Episode, file: DriveFile) {
-        val episodeQuery = """
-            INSERT INTO episodes (id, title, episode_number, season_number, still_path, season_id, file_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (id) DO NOTHING
-        """.trimIndent()
-
-        val insertFileQuery = """
-            INSERT INTO files (id, name, size, modified_time)
-            VALUES (?, ?, ?, ?)
-        """.trimIndent()
-
-        try {
-            val connection: Connection = getConnection()
-            connection.autoCommit = false // Start a transaction
-
-
-            val fileStatement = connection.prepareStatement(insertFileQuery)
-            fileStatement.setString(1, file.id)
-            fileStatement.setString(2, file.name)
-            fileStatement.setLong(3, file.size)
-            fileStatement.setLong(4, file.modifiedTime)
-            fileStatement.executeUpdate()
-
-            val episodeStatement = connection.prepareStatement(episodeQuery)
-
-            episodeStatement.setInt(1, episode.id)
-            episodeStatement.setString(2, episode.title)
-            episodeStatement.setInt(3, episode.episodeNumber)
-            episodeStatement.setInt(4, episode.seasonNumber)
-            episodeStatement.setString(5, episode.stillPath)
-            episodeStatement.setInt(6, seasonId)
-            episodeStatement.setString(7, file.id)
-            episodeStatement.executeUpdate()
-            connection.commit()
-
-            println("Episode inserted: ${episode.title}")
-        } catch (e: SQLException) {
-            println("Error occurred while inserting episode: ${e.message}")
-        }
-    }
-
-    override fun addEpisodes(seasonId: Int, episodes: MutableMap<DriveFile, Episode>) {
-        val episodeQuery = """
-            INSERT INTO episodes (id, title, episode_number, season_number, still_path, season_id, file_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (id) DO NOTHING
-        """.trimIndent()
-
-        val insertFileQuery = """
-            INSERT INTO files (id, name, size, modified_time)
-            VALUES (?, ?, ?, ?)
-        """.trimIndent()
-
-        val connection: Connection = getConnection()
-        val fileStatement = connection.prepareStatement(insertFileQuery)
-        val episodeStatement = connection.prepareStatement(episodeQuery)
-
-        try {
-            connection.autoCommit = false // Start a transaction
-
-            for (episodeMap in episodes) {
-                val episode = episodeMap.value
-                val file = episodeMap.key
-                fileStatement.setString(1, file.id)
-                fileStatement.setString(2, file.name)
-                fileStatement.setLong(3, file.size)
-                fileStatement.setLong(4, file.modifiedTime)
-                fileStatement.addBatch()
-
-                episodeStatement.setInt(1, episode.id)
-                episodeStatement.setString(2, episode.title)
-                episodeStatement.setInt(3, episode.episodeNumber)
-                episodeStatement.setInt(4, episode.seasonNumber)
-                episodeStatement.setString(5, episode.stillPath)
-                episodeStatement.setInt(6, seasonId)
-                episodeStatement.setString(7, file.id)
-                episodeStatement.addBatch()
-            }
-            fileStatement.executeBatch()
-            episodeStatement.executeBatch()
-
-            connection.commit()
-
-            println("Inserted ${episodes.size} episodes.")
-        } catch (e: SQLException) {
-            connection.rollback()
-            e.printStackTrace()
-            println("Error occurred while inserting episode: ${e.message}")
-        } finally {
-            try {
-                fileStatement?.close()
-                episodeStatement?.close()
-            } catch (ex: SQLException) {
-                ex.printStackTrace()
-            }
-            connection.autoCommit = true
-        }
-    }
-
-    override fun deleteEpisode(episodeId: Int) {
-        val query = "DELETE FROM episodes WHERE id = ?"
-        try {
-            getConnection().prepareStatement(query).use { statement ->
-                statement.setInt(1, episodeId)
-                statement.executeUpdate()
-            }
-            println("Episode deleted: $episodeId")
-        } catch (e: SQLException) {
-            println("Error occurred while deleting episode: ${e.message}")
-        }
-    }
-
-    override fun getEpisodes(seasonId: Int): List<Episode> {
-        val episodes = mutableListOf<Episode>()
-        val query = "SELECT * FROM episodes WHERE season_id = ? ORDER BY episode_number"
-        try {
-            getConnection().prepareStatement(query).use { statement ->
-                statement.setInt(1, seasonId)
-                statement.executeQuery().use { resultSet ->
-                    resultSet?.let {
-                        while (resultSet.next()) {
-                            episodes.add(parseResultSetForEpisode(it))
-                        }
-                    }
-                }
-            }
-        } catch (e: SQLException) {
-            println("Error occurred while retrieving episodes: ${e.message}")
-        }
-        return episodes
-    }
-
-    override fun getEpisodeById(episodeId: Int): Episode? {
-        val query = "SELECT * FROM episodes WHERE id = ? LIMIT 1"
-        try {
-            getConnection().prepareStatement(query).use { statement ->
-                statement.setInt(1, episodeId)
-                statement.executeQuery().use { resultSet ->
-                    if (resultSet.next()) {
-                        resultSet?.let { return parseResultSetForEpisode(resultSet) }
-                    }
-                }
-            }
-        } catch (e: SQLException) {
-            println("Error occurred while retrieving episode by id: ${e.message}")
-        }
-        return null
-    }
-
-    override fun batchAddEpisodeAndFiles(episodes: List<Episode>, files: List<DriveFile>) {
-        val connection: Connection = getConnection()
-        var fileStatement: PreparedStatement? = null
-        var episodeStatement: PreparedStatement? = null
-
-        try {
-            connection.autoCommit = false // Start a transaction
-
-            println("Starting batchAddEpisodeAndFiles method for ${episodes.size} episodes and ${files.size} files")
-
-            // Insert files
-            val insertFileQuery = """
-                INSERT INTO files (id, name, size, modified_time)
-                VALUES (?, ?, ?, ?)
-            """.trimIndent()
-            fileStatement = connection.prepareStatement(insertFileQuery)
-
-            files.forEach { file ->
-                fileStatement.setString(1, file.id)
-                fileStatement.setString(2, file.name)
-                fileStatement.setLong(3, file.size)
-                fileStatement.setLong(4, file.modifiedTime)
-                fileStatement.addBatch()
-            }
-            println("Executing batch files")
-            fileStatement.executeBatch()
-            println("Files inserted successfully")
-
-            // Insert episodes
-            val episodeQuery = """
-                INSERT INTO episodes (id, title, episode_number, season_number, still_path, season_id, file_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent()
-            episodeStatement = connection.prepareStatement(episodeQuery)
-            episodes.forEach { episode ->
-                episodeStatement.setInt(1, episode.id)
-                episodeStatement.setString(2, episode.title)
-                episodeStatement.setInt(3, episode.episodeNumber)
-                episodeStatement.setInt(4, episode.seasonNumber)
-                episodeStatement.setString(5, episode.stillPath)
-                episodeStatement.setInt(6, episode.seasonId)
-                episodeStatement.setString(7, episode.fileId)
-                episodeStatement.addBatch()
-            }
-            println("Executing batch episodes")
-            episodeStatement.executeBatch()
-            println("Episodes inserted or updated successfully")
-
-            connection.commit()
-            println("Transaction committed successfully")
-        } catch (e: SQLException) {
-            connection.rollback()
-            e.printStackTrace()
-        } finally {
-            try {
-                fileStatement?.close()
-                episodeStatement?.close()
-            } catch (ex: SQLException) {
-                ex.printStackTrace()
-            }
-            connection.autoCommit = true
-        }
     }
 
     private fun getFiles(query: String): List<DriveFile> {
@@ -966,38 +684,6 @@ class TmdbRepository(
         } catch (e: SQLException) {
             println("Error occurred while deleting file: ${e.message}")
         }
-    }
-
-    private fun parseResultSetForShow(resultSet: ResultSet): Show {
-        return Show(
-            resultSet.getInt("id"),
-            resultSet.getString("name"),
-            resultSet.getString("poster_path"),
-            resultSet.getDouble("vote_average"),
-            resultSet.getLong("modified_time")
-        )
-    }
-
-    private fun parseResultSetForSeason(resultSet: ResultSet): Season {
-        return Season(
-            resultSet.getInt("id"),
-            resultSet.getString("name"),
-            resultSet.getString("poster_path"),
-            resultSet.getInt("season_number"),
-            resultSet.getInt("show_id")
-        )
-    }
-
-    private fun parseResultSetForEpisode(resultSet: ResultSet): Episode {
-        return Episode(
-            resultSet.getInt("id"),
-            resultSet.getString("title"),
-            resultSet.getInt("episode_number"),
-            resultSet.getInt("season_number"),
-            resultSet.getString("still_path"),
-            resultSet.getInt("season_id"),
-            resultSet.getString("file_id")
-        )
     }
 
     private fun parseResultSetForDriveFile(resultSet: ResultSet): DriveFile {
@@ -1061,6 +747,20 @@ class TmdbRepository(
             println("Error occurred while deleting files: ${e.message}")
             e.nextException
         }
+    }
+
+    private fun getRowCountForShow(showId: Int, tableName: String): Int {
+        val countSQL = "SELECT COUNT(*) FROM $tableName WHERE id = ?"
+        var count = 0
+        getConnection().prepareStatement(countSQL).use { preparedStatement ->
+            preparedStatement.setInt(1, showId)
+            preparedStatement.executeQuery().use { resultSet ->
+                if (resultSet.next()) {
+                    count = resultSet.getInt(1)
+                }
+            }
+        }
+        return count
     }
 
 }
