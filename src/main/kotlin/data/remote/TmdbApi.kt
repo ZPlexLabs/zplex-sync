@@ -1,12 +1,12 @@
 package zechs.zplex.sync.data.remote
 
-import data.model.ShowExternalIdResponse
+import data.model.tmdb.GenreResponse
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
-import zechs.zplex.sync.data.model.MovieResponse
-import zechs.zplex.sync.data.model.SeasonResponse
-import zechs.zplex.sync.data.model.TvResponse
+import zechs.zplex.sync.data.model.tmdb.MovieResponse
+import zechs.zplex.sync.data.model.tmdb.SeasonResponse
+import zechs.zplex.sync.data.model.tmdb.TvResponse
 
 interface TmdbApi {
 
@@ -15,16 +15,10 @@ interface TmdbApi {
         @Path("tv_id")
         tv_id: Int,
         @Query("language")
-        language: String = "en-US"
+        language: String = "en",
+        @Query("append_to_response")
+        append_to_response: String
     ): TvResponse
-
-    @GET("3/tv/{tv_id}/external_ids")
-    fun getShowExternalIds(
-        @Path("tv_id")
-        tv_id: Int,
-        @Query("language")
-        language: String = "en-US"
-    ): ShowExternalIdResponse
 
     @GET("3/tv/{tv_id}/season/{season_number}")
     fun getSeason(
@@ -33,7 +27,7 @@ interface TmdbApi {
         @Path("season_number")
         season_number: Int,
         @Query("language")
-        language: String = "en-US",
+        language: String = "en",
     ): SeasonResponse
 
     @GET("3/movie/{movie_id}")
@@ -41,7 +35,21 @@ interface TmdbApi {
         @Path("movie_id")
         movie_id: Int,
         @Query("language")
-        language: String = "en-US"
+        language: String = "en",
+        @Query("append_to_response")
+        append_to_response: String
     ): MovieResponse
+
+    @GET("3/genre/movie/list")
+    fun getMovieGenres(
+        @Query("language")
+        language: String = "en"
+    ): GenreResponse
+
+    @GET("3/genre/tv/list")
+    fun getShowGenres(
+        @Query("language")
+        language: String = "en"
+    ): GenreResponse
 
 }

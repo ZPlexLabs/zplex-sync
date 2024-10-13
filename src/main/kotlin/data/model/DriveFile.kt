@@ -1,4 +1,4 @@
-package data.model
+package zechs.zplex.sync.data.model
 
 import com.google.api.services.drive.model.File
 
