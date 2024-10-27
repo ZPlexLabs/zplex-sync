@@ -29,6 +29,8 @@ data class MovieResponse(
             ?.sortedByDescending { it.official }
             ?.maxByOrNull { Instant.parse(it.published_at).toEpochMilli() }
             ?.key
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { "https://www.youtube.com/watch?v=$it" }
     }
 
     fun getDirectorName(): String? {
