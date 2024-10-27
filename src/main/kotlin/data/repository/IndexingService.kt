@@ -1,6 +1,7 @@
 package zechs.zplex.sync.data.repository
 
 import com.google.api.services.drive.model.File
+import com.google.gson.GsonBuilder
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.CoroutineScope
@@ -9,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.sync.Semaphore
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import redis.clients.jedis.JedisPooled
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import zechs.zplex.sync.data.model.DriveFile
@@ -102,6 +104,19 @@ class IndexingService {
     private val tmdbRepository = TmdbRepository(tmdbApi)
     private val omdbRepository = OmdbRepository(omdbApi)
 
+    private val gson by lazy {
+        GsonBuilder().create()
+    }
+
+    private val redis by lazy {
+        JedisPooled(
+            System.getenv("REDIS_HOST"),
+            System.getenv("REDIS_PORT").toInt(),
+            System.getenv("REDIS_USERNAME"),
+            System.getenv("REDIS_PASSWORD")
+        )
+    }
+
     operator fun invoke() {
         try {
             println("Indexing service started.")
@@ -110,8 +125,11 @@ class IndexingService {
             indexMovies()
             println()
             indexShows()
+            println()
+            updateFiltersCache()
             println("Indexing service ended.")
         } finally {
+            redis.close()
             tmdbRepository.disconnect()
         }
     }
@@ -588,6 +606,83 @@ class IndexingService {
         val seasonNumber: Int,
         val episodeNumber: Int,
     )
+
+    private fun updateFiltersCache() {
+        updateShowGenresCache()
+        updateShowStudiosCache()
+        updateShowParentalRatingsCache()
+        updateShowYearsCache()
+        updateMovieGenresCache()
+        updateMovieStudiosCache()
+        updateMovieParentalRatingsCache()
+        updateMovieYearsCache()
+    }
+
+    private fun updateShowGenresCache() {
+        val commonShowGenres = tmdbRepository.getCommonShowGenres()
+        val key = "commonShowGenres"
+        redis.jsonSet(key, gson.toJson(commonShowGenres.map { mapOf("id" to it.id, "name" to it.name) }))
+        println("[REDIS] Updated Show Genres: ${commonShowGenres.size} items")
+    }
+
+    private fun updateShowStudiosCache() {
+        val commonShowStudios = tmdbRepository.getCommonShowStudios()
+        val key = "commonShowStudios"
+        redis.jsonSet(key, gson.toJson(commonShowStudios.map { mapOf("id" to it.first, "name" to it.second) }))
+        println("[REDIS] Updated Show Studios: ${commonShowStudios.size} items")
+    }
+
+    private fun updateShowParentalRatingsCache() {
+        val ratings = tmdbRepository.getCommonShowParentalRatings()
+        val (added, removed) = updateListCache("commonShowParentalRatings", ratings)
+        println("[REDIS] Updated Show Parental Ratings: ${ratings.size} items, Added: $added, Removed: $removed")
+    }
+
+    private fun updateShowYearsCache() {
+        val years = tmdbRepository.getCommonShowYears()
+        val (added, removed) = updateListCache("commonShowYears", years)
+        println("[REDIS] Updated Show Years: ${years.size} items, Added: $added, Removed: $removed")
+    }
+
+    private fun updateMovieGenresCache() {
+        val commonMovieGenres = tmdbRepository.getCommonMovieGenres()
+        val key = "commonMovieGenres"
+        redis.jsonSet(key, gson.toJson(commonMovieGenres.map { mapOf("id" to it.id, "name" to it.name) }))
+        println("[REDIS] Updated Movie Genres: ${commonMovieGenres.size} items")
+    }
+
+    private fun updateMovieStudiosCache() {
+        val commonMovieStudios = tmdbRepository.getCommonMovieStudios()
+        val key = "commonMovieStudios"
+        redis.jsonSet(key, gson.toJson(commonMovieStudios.map { mapOf("id" to it.first, "name" to it.second) }))
+        println("[REDIS] Updated Movie Studios: ${commonMovieStudios.size} items")
+    }
+
+    private fun updateMovieParentalRatingsCache() {
+        val ratings = tmdbRepository.getCommonMovieParentalRatings()
+        val (added, removed) = updateListCache("commonMovieParentalRatings", ratings)
+        println("[REDIS] Updated Movie Parental Ratings: ${ratings.size} items, Added: $added, Removed: $removed")
+    }
+
+    private fun updateMovieYearsCache() {
+        val years = tmdbRepository.getCommonMovieYears()
+        val (added, removed) = updateListCache("commonMovieYears", years)
+        println("[REDIS] Updated Movie Years: ${years.size} items, Added: $added, Removed: $removed")
+    }
+
+    private fun updateListCache(key: String, list: List<Any>): Pair<Int, Int> {
+        val existing = redis.lrange(key, 0, -1).toSet()
+
+        val toAdd = list.map { it.toString() }.filterNot { existing.contains(it) }
+        val toRemove = existing.filterNot { list.map { item -> item.toString() }.contains(it) }
+
+        toRemove.forEach { redis.lrem(key, 0, it) }
+
+        if (toAdd.isNotEmpty()) {
+            redis.lpush(key, *toAdd.toTypedArray())
+        }
+        return Pair(toAdd.size, toRemove.size)
+    }
 
     private fun parseShowFolderName(folderName: String): ShowInfo? {
         val regex = """^(.+) \((\d{4})\) \[(\d+)]$"""

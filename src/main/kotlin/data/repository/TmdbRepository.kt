@@ -278,6 +278,22 @@ class TmdbRepository(
         }
     }
 
+    override fun getCommonMovieGenres(): List<Genre> {
+        return getCommonGenres(MediaType.MOVIE)
+    }
+
+    override fun getCommonMovieStudios(): List<Pair<Int, String>> {
+        return getCommonStudios(MediaType.MOVIE)
+    }
+
+    override fun getCommonMovieParentalRatings(): List<String> {
+        return getCommonParentalRatings(MediaType.MOVIE)
+    }
+
+    override fun getCommonMovieYears(): List<Int> {
+        return getCommonYears(MediaType.MOVIE)
+    }
+
     private fun createIntegerArray(list: List<Int>): Array {
         return getConnection().createArrayOf("INTEGER", list.toTypedArray())
     }
@@ -606,6 +622,145 @@ class TmdbRepository(
         }
     }
 
+    override fun getCommonShowGenres(): List<Genre> {
+        return getCommonGenres(MediaType.SHOW)
+    }
+
+    override fun getCommonShowStudios(): List<Pair<Int, String>> {
+        return getCommonStudios(MediaType.SHOW)
+    }
+
+    override fun getCommonShowParentalRatings(): List<String> {
+        return getCommonParentalRatings(MediaType.SHOW)
+    }
+
+    override fun getCommonShowYears(): List<Int> {
+        return getCommonYears(MediaType.SHOW)
+    }
+
+    private fun getCommonGenres(type: MediaType): List<Genre> {
+        val genres = mutableListOf<Genre>()
+        val primaryTable = when (type) {
+            MediaType.MOVIE -> "movies"
+            MediaType.SHOW -> "shows"
+        }
+        val query = """
+        SELECT DISTINCT g.id, g.name
+        FROM genres g
+        JOIN (
+            SELECT DISTINCT UNNEST(genres) AS genre_id
+            FROM $primaryTable
+        ) AS unique_genre_ids ON g.id = unique_genre_ids.genre_id
+        WHERE g.type IN ('both', '${if (type == MediaType.MOVIE) "movie" else "show"}')
+        ORDER BY g.name;
+        """.trimIndent()
+
+        try {
+            getConnection().createStatement().use { statement ->
+                statement.executeQuery(query).use { resultSet ->
+                    resultSet?.let {
+                        while (resultSet.next()) {
+                            genres.add(
+                                Genre(
+                                    id = resultSet.getInt("id"),
+                                    name = resultSet.getString("name")
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            println("Error occurred while retrieving common genres from shows table: ${e.message}")
+        }
+        return genres.toList()
+    }
+
+    private fun getCommonStudios(type: MediaType): List<Pair<Int, String>> {
+        val studios = mutableListOf<Pair<Int, String>>()
+        val primaryTable = when (type) {
+            MediaType.MOVIE -> "movies"
+            MediaType.SHOW -> "shows"
+        }
+        val query = """SELECT DISTINCT s.id, s.name
+        FROM studios s
+             JOIN (SELECT DISTINCT studios[1] AS studio_id FROM $primaryTable)
+             AS unique_studio_ids ON s.id = unique_studio_ids.studio_id
+        ORDER BY s.name;
+        """.trimIndent()
+        try {
+            getConnection().createStatement().use { statement ->
+                statement.executeQuery(query).use { resultSet ->
+                    resultSet?.let {
+                        while (resultSet.next()) {
+                            studios.add(
+                                Pair(
+                                    resultSet.getInt("id"),
+                                    resultSet.getString("name")
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            println("Error occurred while retrieving common parental ratings from shows table: ${e.message}")
+        }
+        return studios.toList()
+    }
+
+    private enum class MediaType {
+        MOVIE, SHOW
+    }
+
+    private fun getCommonParentalRatings(type: MediaType): List<String> {
+        val ratings = mutableListOf<String>()
+        val primaryTable = when (type) {
+            MediaType.MOVIE -> "movies"
+            MediaType.SHOW -> "shows"
+        }
+        val query = """SELECT DISTINCT parental_rating FROM $primaryTable 
+        WHERE parental_rating IS NOT NULL 
+        ORDER BY parental_rating
+        """.trimIndent()
+        try {
+            getConnection().createStatement().use { statement ->
+                statement.executeQuery(query).use { resultSet ->
+                    resultSet?.let {
+                        while (resultSet.next()) {
+                            ratings.add(resultSet.getString("parental_rating"))
+                        }
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            println("Error occurred while retrieving common parental ratings from shows table: ${e.message}")
+        }
+        return ratings.toList()
+    }
+
+    private fun getCommonYears(type: MediaType): List<Int> {
+        val years = mutableListOf<Int>()
+        val primaryTable = when (type) {
+            MediaType.MOVIE -> "movies"
+            MediaType.SHOW -> "shows"
+        }
+        val query = "SELECT DISTINCT release_year FROM $primaryTable ORDER BY release_year"
+        try {
+            getConnection().createStatement().use { statement ->
+                statement.executeQuery(query).use { resultSet ->
+                    resultSet?.let {
+                        while (resultSet.next()) {
+                            years.add(resultSet.getInt("release_year"))
+                        }
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            println("Error occurred while retrieving common years: ${e.message}")
+        }
+        return years.toList()
+    }
 
     override fun getAllSeasonIds(): List<Int> {
         val seasonIds = mutableListOf<Int>()

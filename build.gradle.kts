@@ -17,6 +17,10 @@ dependencies {
     val okhttpVersion = "4.12.0"
     val retrofitVersion = "2.9.0"
     val moshiVersion = "1.15.0"
+    val jedisVersion = "5.2.0"
+
+    // Redis client for Java
+    implementation("redis.clients:jedis:$jedisVersion")
 
     // Networking with OkHttp
     implementation(platform("com.squareup.okhttp3:okhttp-bom:$okhttpVersion"))
