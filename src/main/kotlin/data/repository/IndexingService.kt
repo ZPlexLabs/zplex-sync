@@ -333,13 +333,17 @@ class IndexingService {
             println("Number of files to be deleted: ${deleteFileId.size}")
 
             if (deleteFileId.isNotEmpty()) {
-                print("[DATABASE EXECUTION] Deleting ${deleteFileId.size} files from the database.")
+                println("[DATABASE EXECUTION] Deleting ${deleteFileId.size} files from the database.")
                 tmdbRepository.deleteFiles(deleteFileId)
             }
-            val updateTheseFiles = remoteFiles.filter { remoteFile ->
-                val dbFile = databaseFiles.firstOrNull { it.id == remoteFile.file.id }
-                dbFile?.modifiedTime != remoteFile.file.modifiedTime.value
-            }.map { it.file }
+            val updateTheseFiles = remoteFiles
+                .filterNot { remoteFile ->
+                    newFiles.any { newFile -> newFile.file.id == remoteFile.file.id }
+                }
+                .mapNotNull { remoteFile ->
+                    val dbFile = databaseFiles.find { it.id == remoteFile.file.id }
+                    if (dbFile?.modifiedTime != remoteFile.file.modifiedTime.value) remoteFile.file else null
+                }
             println("[DATABASE EXECUTION] ${updateTheseFiles.size} files need to be updated.")
             tmdbRepository.updateModifiedTime(updateTheseFiles)
             syncModifiedTime()
