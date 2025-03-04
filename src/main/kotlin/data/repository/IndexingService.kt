@@ -7,9 +7,11 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Semaphore
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import java.util.concurrent.CancellationException
 import redis.clients.jedis.JedisPooled
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
@@ -131,6 +133,7 @@ class IndexingService {
         } finally {
             redis.close()
             tmdbRepository.disconnect()
+            coroutineScope.cancel(CancellationException("Indexing Service has finished executing"))
         }
     }
 
