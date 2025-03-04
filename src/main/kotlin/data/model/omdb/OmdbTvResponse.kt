@@ -19,6 +19,6 @@ data class OmdbTvResponse(
         return Year
             .substringAfter("–", "")
             .takeIf { it.isNotBlank() }
-            ?.toIntOrNull() ?: if (Year.contains("-")) Integer.MAX_VALUE else null
+            ?.toIntOrNull() ?: if (Year.contains("–")) Integer.MAX_VALUE else null
     }
 }
