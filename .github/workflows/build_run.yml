@@ -1,8 +1,8 @@
 name: build and run
 
 on:
-  schedule:
-    - cron: '0 0 * * *'  # Runs every day at midnight (beginning of the day)
+#  schedule:
+#    - cron: '0 0 * * *'  # Runs every day at midnight (beginning of the day)
   workflow_dispatch: # Manual trigger
 
 env:
