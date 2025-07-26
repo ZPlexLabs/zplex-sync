@@ -178,7 +178,7 @@ CREATE TABLE movie_external_links
     FOREIGN KEY (id) REFERENCES movies (id) ON DELETE CASCADE
 );
 
--- -- Create trigger function to delete related data when a movie is deleted
+-- Create trigger function to delete related data when a movie is deleted
 CREATE OR REPLACE FUNCTION delete_related_movie_data()
     RETURNS TRIGGER AS
 $$
@@ -199,7 +199,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- -- Create trigger to delete related data when a movie is deleted
+-- Create trigger to delete related data when a movie is deleted
 CREATE TRIGGER delete_related_movie_data_trigger
     AFTER DELETE
     ON movies
@@ -331,7 +331,7 @@ CREATE TRIGGER check_seasons_before_show_delete
     FOR EACH ROW
 EXECUTE FUNCTION delete_show_if_no_seasons();
 
--- -- Create trigger function to delete related data when a show is deleted
+-- Create trigger function to delete related data when a show is deleted
 CREATE OR REPLACE FUNCTION delete_related_show_data()
     RETURNS TRIGGER AS
 $$
@@ -352,9 +352,54 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- -- Create trigger to delete related data when a movie is deleted
+-- Create trigger to delete related data when a movie is deleted
 CREATE TRIGGER delete_related_show_data_trigger
     AFTER DELETE
     ON shows
     FOR EACH ROW
 EXECUTE FUNCTION delete_related_show_data();
+
+-- Suggestions API
+CREATE OR REPLACE FUNCTION fetch_titles_for_today(limit_value INT)
+    RETURNS TABLE
+            (
+                tmdbId        INT,
+                title         TEXT,
+                poster_path   TEXT,
+                backdrop_path TEXT,
+                release       TEXT,
+                type          TEXT
+            )
+AS
+$$
+DECLARE
+    now BIGINT;
+BEGIN
+    now := EXTRACT(EPOCH FROM CURRENT_DATE)::BIGINT;
+    RETURN QUERY
+        WITH combined_titles AS (SELECT m.id,
+                                        m.title,
+                                        m.poster_path,
+                                        m.backdrop_path,
+                                        m.release_year::TEXT as release,
+                                        'movie'        AS type
+                                 FROM movies m
+                                 UNION ALL
+                                 SELECT s.id,
+                                        s.title,
+                                        s.poster_path,
+                                        s.backdrop_path,
+                                        CASE
+                                            WHEN s.release_year_to = 2147483647
+                                                THEN CONCAT(s.release_year, ' - Present')
+                                            WHEN s.release_year_to IS NULL THEN s.release_year::TEXT
+                                            ELSE s.release_year || ' - ' || s.release_year_to
+                                            END AS release,
+                                        'show'  AS type
+                                 FROM shows s)
+        SELECT *
+        FROM combined_titles c
+        ORDER BY (c.id + now) % (SELECT COUNT(*) FROM combined_titles)
+        LIMIT limit_value;
+END;
+$$ LANGUAGE plpgsql;
