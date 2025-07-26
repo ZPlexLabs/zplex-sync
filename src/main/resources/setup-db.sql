@@ -339,13 +339,13 @@ BEGIN
     -- Delete related cast entries
     DELETE FROM show_casts WHERE id = OLD.id;
 
-    -- Delete related crew entries
+-- Delete related crew entries
     DELETE FROM show_crews WHERE id = OLD.id;
 
-    -- Delete related studio entries
+-- Delete related studio entries
     DELETE FROM studios WHERE id = OLD.id;
 
-    -- Delete related external links entries
+-- Delete related external links entries
     DELETE FROM show_external_links WHERE id = OLD.id;
 
     RETURN OLD;
@@ -358,3 +358,48 @@ CREATE TRIGGER delete_related_show_data_trigger
     ON shows
     FOR EACH ROW
 EXECUTE FUNCTION delete_related_show_data();
+
+
+CREATE OR REPLACE FUNCTION fetch_titles_for_today(limit_value INT)
+    RETURNS TABLE
+            (
+                tmdbId        INT,
+                title         TEXT,
+                poster_path   TEXT,
+                backdrop_path TEXT,
+                release       TEXT,
+                type          TEXT
+            )
+AS
+$$
+DECLARE
+    now BIGINT;
+BEGIN
+    now := EXTRACT(EPOCH FROM CURRENT_DATE)::BIGINT;
+    RETURN QUERY
+        WITH combined_titles AS (SELECT m.id,
+                                        m.title,
+                                        'movie'        AS type,
+                                        m.poster_path,
+                                        m.backdrop_path,
+                                        m.release_year as release
+                                 FROM movies m
+                                 UNION ALL
+                                 SELECT s.id,
+                                        s.title,
+                                        'show'  AS type,
+                                        s.poster_path,
+                                        s.backdrop_path,
+                                        CASE
+                                            WHEN s.release_year_to = 2147483647
+                                                THEN CONCAT(s.release_year, ' - Present')
+                                            WHEN s.release_year_to IS NULL THEN s.release_year::TEXT
+                                            ELSE s.release_year || ' - ' || s.release_year_to
+                                            END AS release
+                                 FROM shows s)
+        SELECT *
+        FROM combined_titles c
+        ORDER BY (c.id + now) % (SELECT COUNT(*) FROM combined_titles)
+        LIMIT limit_value;
+END;
+$$ LANGUAGE plpgsql;
