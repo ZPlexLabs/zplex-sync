@@ -1,3 +1,5 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
     kotlin("jvm") version "1.9.22"
     id("com.github.johnrengelman.shadow") version "8.1.1"
@@ -69,4 +71,10 @@ tasks.withType<Jar> {
     manifest {
         attributes["Main-Class"] = "zechs.zplex.sync.MainKt"
     }
+}
+
+tasks.withType<ShadowJar> {
+    archiveBaseName.set("zplex-sync")
+    archiveClassifier.set("")
+    archiveVersion.set("")
 }
