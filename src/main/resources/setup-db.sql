@@ -403,3 +403,113 @@ BEGIN
         LIMIT limit_value;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Search Media Function
+CREATE OR REPLACE FUNCTION search_media(
+    p_table_name text, -- 'movies' or 'shows'
+    p_studios int[] DEFAULT NULL,
+    p_parental_ratings text[] DEFAULT NULL,
+    p_release_years int[] DEFAULT NULL,
+    p_genres int[] DEFAULT NULL,
+    p_order_by text DEFAULT 'title',
+    p_order_dir text DEFAULT 'ASC',
+    p_include_nulls boolean DEFAULT true,
+    p_page int DEFAULT 1,
+    p_page_size int DEFAULT 50
+)
+    RETURNS TABLE
+            (
+                tmdbId     int,
+                title      text,
+                posterPath text,
+                imdbRating double precision,
+                release    text
+            )
+AS
+$$
+DECLARE
+    sql_query        text;
+    sql_release_expr text;
+    sql_offset       int;
+    sql_order_expr   text;
+    sql_join_files   text := '';
+BEGIN
+    -- Validate table name
+    IF p_table_name NOT IN ('movies', 'shows') THEN
+        RAISE EXCEPTION 'Invalid table name: %', p_table_name;
+    END IF;
+
+    -- Validate order by column
+    IF p_order_by NOT IN ('title', 'imdb_rating', 'release_year', 'release_date', 'date_added') THEN
+        RAISE EXCEPTION 'Invalid order by column: %', p_order_by;
+    END IF;
+
+    -- Validate order direction
+    IF UPPER(p_order_dir) NOT IN ('ASC', 'DESC') THEN
+        RAISE EXCEPTION 'Invalid order direction: %', p_order_dir;
+    END IF;
+
+    -- Ensure page and page_size are positive
+    IF p_page < 1 THEN
+        RAISE EXCEPTION 'Page must be >= 1';
+    END IF;
+    IF p_page_size < 1 THEN
+        RAISE EXCEPTION 'Page size must be >= 1';
+    END IF;
+
+    -- Calculate offset
+    sql_offset := (p_page - 1) * p_page_size;
+
+    -- Build release year expression
+    IF p_table_name = 'movies' THEN
+        sql_release_expr := 'release_year::TEXT AS release';
+    ELSE
+        sql_release_expr := 'CASE
+                                WHEN release_year_to = 2147483647 THEN release_year::TEXT || '' - Present''
+                                WHEN release_year_to IS NULL THEN release_year::TEXT
+                                ELSE release_year::TEXT || '' - '' || release_year_to::TEXT
+                             END AS release';
+    END IF;
+
+    -- Build ORDER BY expression and optional join for date_added
+    IF p_order_by = 'date_added' THEN
+        IF p_table_name = 'movies' THEN
+            sql_order_expr := 'f.modified_time';
+            sql_join_files := 'JOIN files f ON file_id = f.id';
+        ELSE
+            sql_order_expr := 'modified_time';
+        END IF;
+    ELSE
+        sql_order_expr := format('%I', p_order_by);
+    END IF;
+
+    -- Build dynamic SQL safely with optional NULL filtering, LIMIT and OFFSET
+    sql_query := format(
+            'SELECT t.id AS tmdbId, title, poster_path AS posterPath, imdb_rating AS imdbRating, %s
+             FROM %I t
+             %s
+             WHERE ($1::int[] IS NULL OR studios && $1)
+               AND ($2::text[] IS NULL OR parental_rating = ANY($2))
+               AND ($3::int[] IS NULL OR release_year = ANY($3))
+               AND ($4::int[] IS NULL OR genres && $4)
+               %s
+             ORDER BY %s %s
+             LIMIT %s OFFSET %s',
+            sql_release_expr,
+            p_table_name,
+            sql_join_files,
+            CASE WHEN NOT p_include_nulls THEN 'AND ' || sql_order_expr || ' IS NOT NULL' ELSE '' END,
+            sql_order_expr,
+            UPPER(p_order_dir),
+            p_page_size,
+            sql_offset
+                 );
+
+    -- Log the query as a single line
+    RAISE LOG 'Dynamic search_media query: %', sql_query;
+
+    -- Execute the dynamic query
+    RETURN QUERY EXECUTE sql_query
+        USING p_studios, p_parental_ratings, p_release_years, p_genres;
+END;
+$$ LANGUAGE plpgsql;
