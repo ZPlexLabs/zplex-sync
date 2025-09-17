@@ -11,7 +11,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Semaphore
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
-import java.util.concurrent.CancellationException
 import redis.clients.jedis.JedisPooled
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
@@ -39,7 +38,9 @@ import zechs.zplex.sync.utils.TmdbApiKeyInterceptor
 import zechs.zplex.sync.utils.ext.nullIfNA
 import zechs.zplex.sync.utils.ext.nullIfNAOrElse
 import java.text.SimpleDateFormat
+import java.time.LocalDateTime
 import java.util.*
+import java.util.concurrent.CancellationException
 
 
 class IndexingService {
@@ -226,6 +227,7 @@ class IndexingService {
             )
             // Processing movies
             processMovies(newFiles)
+            refreshMoviesView()
         } finally {
             println("Ended indexing movies")
         }
@@ -259,6 +261,15 @@ class IndexingService {
                     println("Error processing movie: ${videoInfo.name} (${e.message})")
                 }
             }
+    }
+
+    private fun refreshMoviesView() {
+        val sql = "REFRESH MATERIALIZED VIEW movie_details_mv"
+        val connection = tmdbRepository.getConnection()
+        connection.prepareStatement(sql).use { statement ->
+            statement.execute()
+            println("Materialized view 'movie_details_mv' refreshed successfully at ${LocalDateTime.now()}")
+        }
     }
 
     private fun insertNewMovie(videoFile: Info, driveFile: File) {

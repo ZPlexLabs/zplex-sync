@@ -559,3 +559,89 @@ CREATE INDEX IF NOT EXISTS idx_shows_imdb_rating
 -- Ordering by modified_time (shows table has its own column)
 CREATE INDEX IF NOT EXISTS idx_shows_modified_time
     ON shows (modified_time);
+
+
+-- Materialized view for movie details
+CREATE MATERIALIZED VIEW movie_details_mv AS
+SELECT m.id,
+       m.title,
+       m.collection_id,
+       m.file_id,
+       m.imdb_id,
+       TO_CHAR(m.imdb_rating, 'FM9.0')                            AS imdb_rating,
+       m.imdb_votes,
+       to_char(to_timestamp(m.release_date / 1000), 'DD/MM/YYYY') AS release_date,
+       m.release_year,
+       m.parental_rating,
+       m.runtime,
+       m.poster_path,
+       m.backdrop_path,
+       m.logo_image,
+       m.trailer_link,
+       m.tagline,
+       m.plot,
+       m.director,
+       g.genres,
+       s.studios,
+       c.cast,
+       cr.crew,
+       coll.collections
+FROM movies m
+         LEFT JOIN LATERAL (
+    SELECT json_agg(
+                   jsonb_build_object('id', g.id, 'name', g.name)
+                   ORDER BY
+                       g.name
+           ) AS genres
+    FROM unnest(m.genres) gid
+             JOIN genres g ON g.id = gid
+    ) g ON TRUE
+         LEFT JOIN LATERAL (
+    SELECT json_agg(
+                   jsonb_build_object('id', s.id, 'name', s.name, 'logo_path',
+                                      s.logo_path, 'origin_country', s.origin_country)
+                   ORDER BY
+                       s.name
+           ) AS studios
+    FROM unnest(m.studios) sid
+             JOIN studios s ON s.id = sid
+    ) s ON TRUE
+         LEFT JOIN LATERAL (
+    SELECT json_agg(
+                   jsonb_build_object(
+                           'name', c.name, 'image', c.image, 'gender',
+                           c.gender, 'role', c.role
+                   )
+                   ORDER BY
+                       c.role
+           ) AS "cast"
+    FROM movie_casts c
+    WHERE c.id = m.id
+    ) c ON TRUE
+         LEFT JOIN LATERAL (
+    SELECT json_agg(
+                   jsonb_build_object(
+                           'name', cr.name, 'image', cr.image,
+                           'job', cr.job
+                   )
+                   ORDER BY
+                       cr.job
+           ) AS crew
+    FROM movie_crews cr
+    WHERE cr.id = m.id
+    ) cr ON TRUE
+         LEFT JOIN LATERAL (
+    SELECT CASE
+               WHEN COUNT(*) > 1 THEN
+                   json_agg(
+                           jsonb_build_object('id', mm.id, 'title', mm.title)
+                           ORDER BY mm.release_date
+                   )
+               ELSE NULL
+               END AS collections
+    FROM movies mm
+    WHERE mm.collection_id = m.collection_id
+    ) coll ON TRUE;
+
+
+CREATE UNIQUE INDEX idx_movie_details_id ON movie_details_mv (id);
