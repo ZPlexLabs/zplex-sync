@@ -513,3 +513,49 @@ BEGIN
         USING p_studios, p_parental_ratings, p_release_years, p_genres;
 END;
 $$ LANGUAGE plpgsql;
+
+-- =========================================================
+-- INDEXES FOR MOVIES
+-- =========================================================
+
+CREATE INDEX IF NOT EXISTS idx_movies_studios_gin
+    ON movies USING GIN (studios);
+
+CREATE INDEX IF NOT EXISTS idx_movies_genres_gin
+    ON movies USING GIN (genres);
+
+CREATE INDEX IF NOT EXISTS idx_movies_parental_rating
+    ON movies (parental_rating);
+
+CREATE INDEX IF NOT EXISTS idx_movies_release_year
+    ON movies (release_year);
+
+CREATE INDEX IF NOT EXISTS idx_movies_imdb_rating
+    ON movies (imdb_rating);
+
+-- ORDER BY date_added (via files join)
+CREATE INDEX IF NOT EXISTS idx_files_modified_time
+    ON files (id, modified_time);
+
+-- =========================================================
+-- INDEXES FOR SHOWS
+-- =========================================================
+
+CREATE INDEX IF NOT EXISTS idx_shows_studios_gin
+    ON shows USING GIN (studios);
+
+CREATE INDEX IF NOT EXISTS idx_shows_genres_gin
+    ON shows USING GIN (genres);
+
+CREATE INDEX IF NOT EXISTS idx_shows_parental_rating
+    ON shows (parental_rating);
+
+CREATE INDEX IF NOT EXISTS idx_shows_release_year
+    ON shows (release_year);
+
+CREATE INDEX IF NOT EXISTS idx_shows_imdb_rating
+    ON shows (imdb_rating);
+
+-- Ordering by modified_time (shows table has its own column)
+CREATE INDEX IF NOT EXISTS idx_shows_modified_time
+    ON shows (modified_time);
