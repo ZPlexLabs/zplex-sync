@@ -711,3 +711,6 @@ SELECT s.id,
 FROM shows s;
 
 CREATE UNIQUE INDEX idx_show_details_id ON shows_details_mv (id);
+
+-- Set parallel workers
+SET max_parallel_workers_per_gather = 4;
