@@ -365,6 +365,7 @@ class IndexingService {
 
             // Processing shows
             processShows(newFiles)
+            refreshShowsView()
         } finally {
             println("Ended indexing shows")
         }
@@ -439,6 +440,15 @@ class IndexingService {
 
                 upsertShowData(show, seasonsToBeInserted, episodesToBeInserted, filesToBeInserted)
             }
+    }
+
+    private fun refreshShowsView() {
+        val sql = "REFRESH MATERIALIZED VIEW shows_details_mv"
+        val connection = tmdbRepository.getConnection()
+        connection.prepareStatement(sql).use { statement ->
+            statement.execute()
+            println("Materialized view 'shows_details_mv' refreshed successfully at ${LocalDateTime.now()}")
+        }
     }
 
     private fun isValidShowPath(file: DrivePathFile): Boolean {

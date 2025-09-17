@@ -645,3 +645,69 @@ FROM movies m
 
 
 CREATE UNIQUE INDEX idx_movie_details_id ON movie_details_mv (id);
+
+
+-- Materialized view for tvshows details
+CREATE MATERIALIZED VIEW shows_details_mv AS
+SELECT s.id,
+       s.title,
+       s.imdb_id,
+       TO_CHAR(s.imdb_rating, 'FM9.0')                            AS imdb_rating,
+       s.imdb_votes,
+       to_char(to_timestamp(s.release_date / 1000), 'DD/MM/YYYY') AS release_date,
+       CASE
+           WHEN s.release_year_to = 2147483647 THEN s.release_year || ' - Present'
+           WHEN s.release_year_to IS NULL THEN s.release_year::TEXT
+           ELSE s.release_year || ' - ' || s.release_year_to
+           END                                                    AS release,
+       s.parental_rating,
+       s.poster_path,
+       s.backdrop_path,
+       s.logo_image,
+       s.trailer_link,
+       s.plot,
+       s.director,
+
+       -- Genres
+       (SELECT json_agg(jsonb_build_object('id', g.id, 'name', g.name) ORDER BY g.name)
+        FROM genres g
+        WHERE g.id = ANY (s.genres))                              AS genres,
+
+       -- Studios
+       (SELECT json_agg(jsonb_build_object('id', st.id, 'name', st.name, 'logo_path', st.logo_path, 'origin_country',
+                                           st.origin_country) ORDER BY st.name)
+        FROM studios st
+        WHERE st.id = ANY (s.studios))                            AS studios,
+
+       -- Cast
+       (SELECT json_agg(jsonb_build_object('name', c.name, 'image', c.image, 'gender', c.gender, 'role', c.role)
+                        ORDER BY c.role)
+        FROM show_casts c
+        WHERE c.id = s.id)                                        AS cast,
+
+       -- Crew
+       (SELECT json_agg(jsonb_build_object('name', cr.name, 'image', cr.image, 'job', cr.job) ORDER BY cr.job)
+        FROM show_crews cr
+        WHERE cr.id = s.id)                                       AS crew,
+
+       -- Latest season with episodes count
+       (SELECT jsonb_build_object(
+                       'id', se.id,
+                       'name', se.name,
+                       'season_number', se.season_number,
+                       'release_date', to_char(to_timestamp(se.release_date / 1000), 'DD/MM/YYYY'),
+                       'release_year', se.release_year,
+                       'poster_path', se.poster_path,
+                       'episodes_count', COALESCE(ec.episodes_count, 0)
+               )
+        FROM seasons se
+                 LEFT JOIN (SELECT season_id, COUNT(*) AS episodes_count
+                            FROM episodes
+                            GROUP BY season_id) ec ON ec.season_id = se.id
+        WHERE se.show_id = s.id
+        ORDER BY se.season_number DESC
+        LIMIT 1)                                                  AS latest_season
+
+FROM shows s;
+
+CREATE UNIQUE INDEX idx_show_details_id ON shows_details_mv (id);
