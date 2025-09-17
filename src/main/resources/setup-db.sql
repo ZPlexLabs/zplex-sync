@@ -648,7 +648,7 @@ CREATE UNIQUE INDEX idx_movie_details_id ON movie_details_mv (id);
 
 
 -- Materialized view for tvshows details
-CREATE MATERIALIZED VIEW shows_details_mv AS
+CREATE MATERIALIZED VIEW show_details_mv AS
 SELECT s.id,
        s.title,
        s.imdb_id,
@@ -710,7 +710,7 @@ SELECT s.id,
 
 FROM shows s;
 
-CREATE UNIQUE INDEX idx_show_details_id ON shows_details_mv (id);
+CREATE UNIQUE INDEX idx_show_details_id ON show_details_mv (id);
 
 -- Set parallel workers
 SET max_parallel_workers_per_gather = 4;

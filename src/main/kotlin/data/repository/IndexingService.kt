@@ -443,7 +443,7 @@ class IndexingService {
     }
 
     private fun refreshShowsView() {
-        val sql = "REFRESH MATERIALIZED VIEW shows_details_mv"
+        val sql = "REFRESH MATERIALIZED VIEW show_details_mv"
         val connection = tmdbRepository.getConnection()
         connection.prepareStatement(sql).use { statement ->
             statement.execute()
