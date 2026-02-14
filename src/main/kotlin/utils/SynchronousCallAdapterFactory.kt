@@ -17,11 +17,11 @@ class SynchronousCallAdapterFactory : CallAdapter.Factory() {
         if (returnType.toString().contains("retrofit2.Call")) {
             return null
         }
-        return object : CallAdapter<Any, Any> {
+        return object : CallAdapter<Any, Any?> {
             override fun responseType(): Type = returnType
-            override fun adapt(call: retrofit2.Call<Any>): Any {
+            override fun adapt(call: retrofit2.Call<Any>): Any? {
                 try {
-                    return call.execute().body()!!
+                    return call.execute().body()
                 } catch (e: Exception) {
                     throw RuntimeException(e)
                 }
