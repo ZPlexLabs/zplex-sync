@@ -33,6 +33,7 @@ import zechs.zplex.sync.utils.Constants.Companion.TMDB_API_KEY
 import zechs.zplex.sync.utils.Constants.Companion.TMDB_API_URL
 import zechs.zplex.sync.utils.GoogleDrive
 import zechs.zplex.sync.utils.OmdbApiKeyInterceptor
+import zechs.zplex.sync.utils.RedisConfig
 import zechs.zplex.sync.utils.SynchronousCallAdapterFactory
 import zechs.zplex.sync.utils.TmdbApiKeyInterceptor
 import zechs.zplex.sync.utils.ext.nullIfNA
@@ -112,12 +113,7 @@ class IndexingService {
     }
 
     private val redis by lazy {
-        JedisPooled(
-            System.getenv("REDIS_HOST"),
-            System.getenv("REDIS_PORT").toInt(),
-            System.getenv("REDIS_USERNAME"),
-            System.getenv("REDIS_PASSWORD")
-        )
+        JedisPooled(RedisConfig.buildRedisUrl())
     }
 
     operator fun invoke() {
