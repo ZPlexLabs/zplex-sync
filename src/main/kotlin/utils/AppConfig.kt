@@ -71,12 +71,31 @@ object AppConfig {
         val key = parts[0]
         val default = parts.getOrNull(1)
 
-        return System.getenv(key)
-            ?: System.getProperty(key)
-            ?: properties.getProperty(key)?.let { resolve(it) }
-            ?: default
-            ?: throw IllegalArgumentException(
-                "Could not resolve placeholder '$key' and no default provided"
-            )
+        System.getenv(key)?.let {
+            return normalizeEnvValue(it)
+        }
+
+        System.getProperty(key)?.let {
+            return it
+        }
+
+        properties.getProperty(key)?.let {
+            return resolve(it)
+        }
+        if (default != null) return default
+
+        throw IllegalArgumentException(
+            "Could not resolve placeholder '$key' and no default provided"
+        )
+    }
+
+    private fun normalizeEnvValue(value: String): String {
+        return if (value.contains("\\n")) {
+            value
+                .replace("\\n", "\n")
+                .replace("\\r", "\r")
+        } else {
+            value
+        }
     }
 }
