@@ -55,17 +55,28 @@ jobs:
       - name: Run ZPlexSync
         run: java -jar zplex-sync/zplex-sync.jar
         env:
+          # Google Drive
           GOOGLE_DRIVE_CLIENT_EMAIL: ${{ secrets.GOOGLE_DRIVE_CLIENT_EMAIL }}
           GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
           GOOGLE_DRIVE_PRIVATE_KEY_ID: ${{ secrets.GOOGLE_DRIVE_PRIVATE_KEY_ID }}
           GOOGLE_DRIVE_PRIVATE_KEY_PKCS8: ${{ secrets.GOOGLE_DRIVE_PRIVATE_KEY_PKCS8 }}
+
+          # Media folders
           MOVIES_FOLDER: ${{ secrets.MOVIES_FOLDER }}
           SHOWS_FOLDER: ${{ secrets.SHOWS_FOLDER }}
+
+          # Postgres
+          ZPLEX_DATABASE_HOST: ${{ secrets.ZPLEX_DATABASE_HOST }}
+          ZPLEX_DATABASE_PORT: ${{ secrets.ZPLEX_DATABASE_PORT }}
+          ZPLEX_DATABASE_USERNAME: ${{ secrets.ZPLEX_DATABASE_USERNAME }}
+          ZPLEX_DATABASE_PASSWORD: ${{ secrets.ZPLEX_DATABASE_PASSWORD }}
+
+          # Cache
+          ZPLEX_CACHE_HOST: ${{ secrets.ZPLEX_CACHE_HOST }}
+          ZPLEX_CACHE_PORT: ${{ secrets.ZPLEX_CACHE_PORT }}
+          ZPLEX_CACHE_USERNAME: ${{ secrets.ZPLEX_CACHE_USERNAME }}
+          ZPLEX_CACHE_PASSWORD: ${{ secrets.ZPLEX_CACHE_PASSWORD }}
+
+          # APIs
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
-          ZPLEX_DATABASE_URL: ${{ secrets.ZPLEX_DATABASE_URL }}
-          # Redis configs
-          REDIS_HOST: ${{ secrets.REDIS_HOST }}
-          REDIS_PORT: ${{ secrets.REDIS_PORT }}
-          REDIS_USERNAME: ${{ secrets.REDIS_USERNAME }}
-          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
