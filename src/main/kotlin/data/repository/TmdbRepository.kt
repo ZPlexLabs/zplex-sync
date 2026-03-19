@@ -27,7 +27,7 @@ class TmdbRepository(
 ) : MovieDao, ShowDao, FileDao, Database {
 
     private val database by lazy {
-        DatabaseConnector(System.getenv("ZPLEX_DATABASE_URL"))
+        DatabaseConnector()
     }
 
     init {

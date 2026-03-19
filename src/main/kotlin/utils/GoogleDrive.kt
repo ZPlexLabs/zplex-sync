@@ -29,10 +29,10 @@ class GoogleDrive(private val applicationName: String) {
     private fun authorize(): GoogleCredentials {
         try {
             return ServiceAccountCredentials.fromPkcs8(
-                /* clientId */ System.getenv("GOOGLE_DRIVE_CLIENT_ID"),
-                /* clientEmail */ System.getenv("GOOGLE_DRIVE_CLIENT_EMAIL"),
-                /* privateKeyPkcs8 */ System.getenv("GOOGLE_DRIVE_PRIVATE_KEY_PKCS8"),
-                /* privateKeyId */ System.getenv("GOOGLE_DRIVE_PRIVATE_KEY_ID"),
+                /* clientId */ AppConfig.get("google.drive.client.id"),
+                /* clientEmail */  AppConfig.get("google.drive.client.email"),
+                /* privateKeyPkcs8 */ AppConfig.get("google.drive.client.email"),
+                /* privateKeyId */ AppConfig.get("google.drive.private.key"),
                 /* scopes */ SCOPES
             )
         } catch (e: IOException) {

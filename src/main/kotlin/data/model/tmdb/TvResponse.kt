@@ -5,7 +5,7 @@ import zechs.zplex.sync.data.model.Genre
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.*
+import java.util.Locale
 
 
 data class TvResponse(

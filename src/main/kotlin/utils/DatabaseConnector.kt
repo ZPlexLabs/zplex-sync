@@ -1,28 +1,45 @@
 package zechs.zplex.sync.utils
 
-import java.net.URI
-import java.net.URISyntaxException
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.SQLException
 
-class DatabaseConnector(
-    private val databaseUrl: String
-) {
+class DatabaseConnector {
 
     var connection: Connection? = null
         private set
 
-    @Throws(SQLException::class, URISyntaxException::class)
+    @Throws(SQLException::class)
     fun connect() {
-        val dbUri = URI(databaseUrl)
-        val username = dbUri.userInfo.split(":".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()[0]
-        val password = dbUri.userInfo.split(":".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()[1]
-        val dbUrl = ("jdbc:postgresql://" + dbUri.host + ":" + dbUri.port + dbUri.path
-                + "?sslmode=require")
+        val host = AppConfig.get("zplex.db.host")
+            .trim()
+            .also {
+                require(it.isNotBlank()) { "Database host is blank" }
+                require(!it.contains("\n")) { "Invalid host format" }
+            }
 
-        connection = DriverManager.getConnection(dbUrl, username, password)
-        println("Connected to database: " + dbUri.path.substring(1))
+        val port = AppConfig.get("zplex.db.port")
+            .trim()
+            .toIntOrNull()
+            ?: throw IllegalArgumentException("Database port must be numeric")
+
+        require(port in 1..65535) { "Database port out of valid range (1–65535)" }
+
+        val username = AppConfig.get("zplex.db.username")
+            .trim()
+            .also { require(it.isNotBlank()) { "Database username is blank" } }
+
+        val password = AppConfig.get("zplex.db.password")
+
+        val jdbcUrl = "jdbc:postgresql://$host:$port/zplex?sslmode=require"
+
+        connection = DriverManager.getConnection(
+            jdbcUrl,
+            username,
+            password
+        )
+
+        println("Connected to database at $host:$port (SSL required)")
     }
 
     @Throws(SQLException::class)
@@ -32,7 +49,6 @@ class DatabaseConnector(
                 it.close()
                 println("Disconnected from database")
             }
-        } ?: run { println("No connection to close") }
+        } ?: println("No connection to close")
     }
-
 }

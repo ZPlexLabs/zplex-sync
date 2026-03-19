@@ -26,10 +26,9 @@ import zechs.zplex.sync.data.model.tmdb.TvResponse
 import zechs.zplex.sync.data.model.tmdb.TvSeason
 import zechs.zplex.sync.data.remote.OmdbApi
 import zechs.zplex.sync.data.remote.TmdbApi
+import zechs.zplex.sync.utils.AppConfig
 import zechs.zplex.sync.utils.Constants.Companion.IS_DEBUG
-import zechs.zplex.sync.utils.Constants.Companion.OMDB_API_KEY
 import zechs.zplex.sync.utils.Constants.Companion.OMDB_API_URL
-import zechs.zplex.sync.utils.Constants.Companion.TMDB_API_KEY
 import zechs.zplex.sync.utils.Constants.Companion.TMDB_API_URL
 import zechs.zplex.sync.utils.GoogleDrive
 import zechs.zplex.sync.utils.OmdbApiKeyInterceptor
@@ -40,7 +39,8 @@ import zechs.zplex.sync.utils.ext.nullIfNA
 import zechs.zplex.sync.utils.ext.nullIfNAOrElse
 import java.text.SimpleDateFormat
 import java.time.LocalDateTime
-import java.util.*
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.CancellationException
 
 
@@ -72,8 +72,8 @@ class IndexingService {
                 if (IS_DEBUG) {
                     it.addInterceptor(httpLogging)
                 }
-                it.addInterceptor(TmdbApiKeyInterceptor(TMDB_API_KEY))
-                it.addInterceptor(OmdbApiKeyInterceptor(OMDB_API_KEY))
+                it.addInterceptor(TmdbApiKeyInterceptor(AppConfig.get("tmdb.api.key")))
+                it.addInterceptor(OmdbApiKeyInterceptor(AppConfig.get("omdb.api.key")))
             }.build()
     }
 
@@ -206,13 +206,8 @@ class IndexingService {
         try {
             println("Beginning indexing movies...")
 
-            if (!doesMoviesFolderExist()) {
-                println("Movies folder does not exist, skipping show processing.")
-                return
-            }
-
             val movieFiles = driveRepository.getFiles(
-                folderId = System.getenv("MOVIES_FOLDER"),
+                folderId = AppConfig.get("movies.folder"),
                 foldersOnly = false
             ).filter { it.mimeType.startsWith("video/") }
 
@@ -260,7 +255,7 @@ class IndexingService {
     }
 
     private fun refreshMoviesView() {
-        val sql = "REFRESH MATERIALIZED VIEW movie_details_mv"
+        val sql = "SELECT refresh_movie_details_mv()"
         val connection = tmdbRepository.getConnection()
         connection.prepareStatement(sql).use { statement ->
             statement.execute()
@@ -323,12 +318,7 @@ class IndexingService {
         try {
             println("Beginning indexing shows...")
 
-            if (!doesShowsFolderExist()) {
-                println("Shows folder does not exist, skipping show processing.")
-                return
-            }
-
-            val remoteFiles = driveRepository.getAllFilesRecursively(folderId = System.getenv("SHOWS_FOLDER"))
+            val remoteFiles = driveRepository.getAllFilesRecursively(folderId = AppConfig.get("shows.folder"))
             println("[GOOGLE DRIVE] Number of files found: ${remoteFiles.size} in the shows folder.")
 
             // Sync files
@@ -369,7 +359,7 @@ class IndexingService {
 
     private fun syncModifiedTime() {
         val remoteShowFolders = driveRepository.getFiles(
-            folderId = System.getenv("SHOWS_FOLDER"),
+            folderId = AppConfig.get("shows.folder"),
             foldersOnly = true
         )
         val databaseShows = tmdbRepository.getAllShows()
@@ -401,7 +391,7 @@ class IndexingService {
      */
     private fun processShows(showFiles: List<DrivePathFile>) {
         val remoteShowFolders = driveRepository.getFiles(
-            folderId = System.getenv("SHOWS_FOLDER"),
+            folderId = AppConfig.get("shows.folder"),
             foldersOnly = true
         )
 
@@ -439,7 +429,7 @@ class IndexingService {
     }
 
     private fun refreshShowsView() {
-        val sql = "REFRESH MATERIALIZED VIEW show_details_mv"
+        val sql = "SELECT refresh_show_details_mv()"
         val connection = tmdbRepository.getConnection()
         connection.prepareStatement(sql).use { statement ->
             statement.execute()
@@ -780,13 +770,4 @@ class IndexingService {
             null
         }
     }
-
-    private fun doesMoviesFolderExist(): Boolean {
-        return System.getenv("MOVIES_FOLDER") != null
-    }
-
-    private fun doesShowsFolderExist(): Boolean {
-        return System.getenv("SHOWS_FOLDER") != null
-    }
-
 }
