@@ -31,8 +31,8 @@ class GoogleDrive(private val applicationName: String) {
             return ServiceAccountCredentials.fromPkcs8(
                 /* clientId */ AppConfig.get("google.drive.client.id"),
                 /* clientEmail */  AppConfig.get("google.drive.client.email"),
-                /* privateKeyPkcs8 */ AppConfig.get("google.drive.client.email"),
-                /* privateKeyId */ AppConfig.get("google.drive.private.key"),
+                /* privateKeyPkcs8 */ AppConfig.get("google.drive.private.key"),
+                /* privateKeyId */ AppConfig.get("google.drive.private.key.id"),
                 /* scopes */ SCOPES
             )
         } catch (e: IOException) {
