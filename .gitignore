@@ -39,3 +39,15 @@ bin/
 ### Mac OS ###
 .DS_Store0.01200
 target/
+
+### Secrets ###
+.env
+.env.*
+!.env.example
+*.env
+application.dev.properties
+application-*.local.properties
+application-local.properties
+*-service-account*.json
+*.pem
+*.p12
