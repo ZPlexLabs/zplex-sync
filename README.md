@@ -31,7 +31,10 @@ The schema in `src/main/resources/setup-db.sql` also defines the read-side query
 `search_media` and `count_media`. Both accept trailing per-user access params
 (`p_allowed_ratings` — NULL means no rating ceiling, `p_allow_unrated`, `p_unrated_ratings`,
 `p_blacklist_ids`) so `zplex-api` can filter catalog listings by rating rank and hide
-blacklisted titles.
+blacklisted titles. The daily suggestions function `fetch_titles_for_today` takes matching
+access params (`p_allow_movies`, `p_allow_shows`, `p_allowed_ratings`, `p_allow_unrated`,
+`p_unrated_ratings`, `p_movie_blacklist`, `p_show_blacklist`) so per-user library flags,
+rating ceiling, and per-type blacklist are applied to the two-type suggestion pool.
 
 ## Configuration
 

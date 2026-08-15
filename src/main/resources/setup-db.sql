@@ -360,7 +360,18 @@ CREATE TRIGGER delete_related_show_data_trigger
 EXECUTE FUNCTION delete_related_show_data();
 
 -- Suggestions API
-CREATE OR REPLACE FUNCTION fetch_titles_for_today(limit_value INT)
+-- Access params filter the daily selection per user (library flags, rating ceiling, per-type blacklist).
+DROP FUNCTION IF EXISTS fetch_titles_for_today(int);
+CREATE OR REPLACE FUNCTION fetch_titles_for_today(
+    limit_value INT,
+    p_allow_movies boolean DEFAULT true,
+    p_allow_shows boolean DEFAULT true,
+    p_allowed_ratings text[] DEFAULT NULL,
+    p_allow_unrated boolean DEFAULT true,
+    p_unrated_ratings text[] DEFAULT NULL,
+    p_movie_blacklist int[] DEFAULT NULL,
+    p_show_blacklist int[] DEFAULT NULL
+)
     RETURNS TABLE
             (
                 tmdbId        INT,
@@ -384,6 +395,12 @@ BEGIN
                                         m.release_year::TEXT as release,
                                         'movie'        AS type
                                  FROM movies m
+                                 WHERE p_allow_movies
+                                   AND (p_allowed_ratings IS NULL
+                                        OR m.parental_rating = ANY(p_allowed_ratings)
+                                        OR (p_allow_unrated AND (m.parental_rating IS NULL
+                                            OR (p_unrated_ratings IS NOT NULL AND m.parental_rating = ANY(p_unrated_ratings)))))
+                                   AND (p_movie_blacklist IS NULL OR m.id <> ALL(p_movie_blacklist))
                                  UNION ALL
                                  SELECT s.id,
                                         s.title,
@@ -396,10 +413,16 @@ BEGIN
                                             ELSE s.release_year || ' - ' || s.release_year_to
                                             END AS release,
                                         'show'  AS type
-                                 FROM shows s)
+                                 FROM shows s
+                                 WHERE p_allow_shows
+                                   AND (p_allowed_ratings IS NULL
+                                        OR s.parental_rating = ANY(p_allowed_ratings)
+                                        OR (p_allow_unrated AND (s.parental_rating IS NULL
+                                            OR (p_unrated_ratings IS NOT NULL AND s.parental_rating = ANY(p_unrated_ratings)))))
+                                   AND (p_show_blacklist IS NULL OR s.id <> ALL(p_show_blacklist)))
         SELECT *
         FROM combined_titles c
-        ORDER BY (c.id + now) % (SELECT COUNT(*) FROM combined_titles)
+        ORDER BY (c.id + now) % GREATEST((SELECT COUNT(*) FROM combined_titles), 1)
         LIMIT limit_value;
 END;
 $$ LANGUAGE plpgsql;
