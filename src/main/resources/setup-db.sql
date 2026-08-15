@@ -1,112 +1,16 @@
--- Database: V1
+-- Consolidated latest schema (idempotent)
 
--- Create files table
-CREATE TABLE files
+-- Files
+CREATE TABLE IF NOT EXISTS files
 (
     id   TEXT PRIMARY KEY NOT NULL,
     name TEXT             NOT NULL,
-    size BIGINT           NOT NULL
+    size BIGINT           NOT NULL,
+    modified_time BIGINT NOT NULL DEFAULT 0
 );
 
--- Create movies table
-CREATE TABLE movies
-(
-    id           INTEGER PRIMARY KEY NOT NULL,
-    title        TEXT                NOT NULL,
-    poster_path  TEXT,
-    vote_average NUMERIC(3, 1)       NOT NULL,
-    year         INTEGER             NOT NULL,
-    file_id      TEXT REFERENCES files (id) ON DELETE CASCADE
-);
-
--- Create shows table
-CREATE TABLE shows
-(
-    id           INTEGER PRIMARY KEY NOT NULL,
-    name         TEXT                NOT NULL,
-    poster_path  TEXT,
-    vote_average NUMERIC(3, 1)       NOT NULL
-);
-
--- Create seasons table
-CREATE TABLE seasons
-(
-    id            INTEGER PRIMARY KEY NOT NULL,
-    name          TEXT                NOT NULL,
-    season_number INTEGER             NOT NULL,
-    poster_path   TEXT,
-    show_id       INTEGER REFERENCES shows (id) ON DELETE CASCADE
-);
-
--- Create episodes table
-CREATE TABLE episodes
-(
-    id             INTEGER PRIMARY KEY NOT NULL,
-    title          TEXT,
-    episode_number INTEGER             NOT NULL,
-    season_number  INTEGER             NOT NULL,
-    still_path     TEXT,
-    season_id      INTEGER REFERENCES seasons (id) ON DELETE CASCADE,
-    file_id        TEXT REFERENCES files (id) ON DELETE CASCADE
-);
-
--- Create trigger function to delete seasons if no episodes present
-CREATE OR REPLACE FUNCTION delete_season_if_no_episodes()
-    RETURNS TRIGGER AS
-$$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM episodes WHERE season_id = OLD.season_id) THEN
-        DELETE FROM seasons WHERE id = OLD.season_id;
-    END IF;
-    RETURN OLD;
-END;
-$$
-    LANGUAGE plpgsql;
-
-
--- Create trigger to delete seasons if no episodes present
-CREATE TRIGGER check_episodes_before_season_delete
-    AFTER DELETE
-    ON episodes
-    FOR EACH ROW
-EXECUTE FUNCTION delete_season_if_no_episodes();
-
--- Create trigger function to delete shows if no seasons present
-CREATE OR REPLACE FUNCTION delete_show_if_no_seasons()
-    RETURNS TRIGGER AS
-$$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM seasons WHERE show_id = OLD.show_id) THEN
-        DELETE FROM shows WHERE id = OLD.show_id;
-    END IF;
-    RETURN OLD;
-END;
-$$
-    LANGUAGE plpgsql;
-
--- Create trigger to delete shows if no seasons present
-CREATE TRIGGER check_seasons_before_show_delete
-    AFTER DELETE
-    ON seasons
-    FOR EACH ROW
-EXECUTE FUNCTION delete_show_if_no_seasons();
-
--- Database Migration: V1 -> V2
-
--- Add column modified_time to files table
-ALTER TABLE files
-    ADD COLUMN modified_time BIGINT NOT NULL DEFAULT 0;
-
--- Add column modified_time to shows table
-ALTER TABLE shows
-    ADD COLUMN modified_time BIGINT NOT NULL DEFAULT 0;
-
-
--- Database Migration: V2 -> V3
-DROP TABLE IF EXISTS movies;
-
--- Table: movies
-CREATE TABLE movies
+-- Movies and related
+CREATE TABLE IF NOT EXISTS movies
 (
     id              INT   NOT NULL PRIMARY KEY,
     title           TEXT  NOT NULL,
@@ -131,8 +35,7 @@ CREATE TABLE movies
     FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE
 );
 
--- Table: casts
-CREATE TABLE movie_casts
+CREATE TABLE IF NOT EXISTS movie_casts
 (
     id     INT  NOT NULL,
     image  TEXT,
@@ -142,8 +45,7 @@ CREATE TABLE movie_casts
     FOREIGN KEY (id) REFERENCES movies (id) ON DELETE CASCADE
 );
 
--- Table: crews
-CREATE TABLE movie_crews
+CREATE TABLE IF NOT EXISTS movie_crews
 (
     id    INT  NOT NULL,
     image TEXT,
@@ -152,25 +54,7 @@ CREATE TABLE movie_crews
     FOREIGN KEY (id) REFERENCES movies (id) ON DELETE CASCADE
 );
 
--- Table: genres
-CREATE TABLE genres
-(
-    id   INT  NOT NULL PRIMARY KEY,
-    name TEXT NOT NULL,
-    type TEXT NOT NULL
-);
-
--- Table: studios
-CREATE TABLE studios
-(
-    id             INT  NOT NULL PRIMARY KEY,
-    logo_path      TEXT,
-    name           TEXT NOT NULL,
-    origin_country TEXT NOT NULL
-);
-
--- Table: external_links
-CREATE TABLE movie_external_links
+CREATE TABLE IF NOT EXISTS movie_external_links
 (
     id   INT  NOT NULL,
     name TEXT NOT NULL,
@@ -178,41 +62,24 @@ CREATE TABLE movie_external_links
     FOREIGN KEY (id) REFERENCES movies (id) ON DELETE CASCADE
 );
 
--- Create trigger function to delete related data when a movie is deleted
-CREATE OR REPLACE FUNCTION delete_related_movie_data()
-    RETURNS TRIGGER AS
-$$
-BEGIN
-    -- Delete related cast entries
-    DELETE FROM movie_casts WHERE id = OLD.id;
+-- Genres and studios
+CREATE TABLE IF NOT EXISTS genres
+(
+    id   INT  NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL
+);
 
-    -- Delete related crew entries
-    DELETE FROM movie_crews WHERE id = OLD.id;
+CREATE TABLE IF NOT EXISTS studios
+(
+    id             INT  NOT NULL PRIMARY KEY,
+    logo_path      TEXT,
+    name           TEXT NOT NULL,
+    origin_country TEXT NOT NULL
+);
 
-    -- Delete related studio entries
-    DELETE FROM studios WHERE id = OLD.id;
-
-    -- Delete related external links entries
-    DELETE FROM movie_external_links WHERE id = OLD.id;
-
-    RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
-
--- Create trigger to delete related data when a movie is deleted
-CREATE TRIGGER delete_related_movie_data_trigger
-    AFTER DELETE
-    ON movies
-    FOR EACH ROW
-EXECUTE FUNCTION delete_related_movie_data();
-
--- Database Migration: V3 -> V4
-DROP TABLE IF EXISTS episodes;
-DROP TABLE IF EXISTS seasons;
-DROP TABLE IF EXISTS shows;
-
--- Table: shows
-CREATE TABLE shows
+-- Shows and related
+CREATE TABLE IF NOT EXISTS shows
 (
     id              INT    NOT NULL PRIMARY KEY,
     title           TEXT   NOT NULL,
@@ -231,11 +98,10 @@ CREATE TABLE shows
     director        TEXT,
     genres          INT[]  NOT NULL,
     studios         INT[]  NOT NULL,
-    modified_time   BIGINT NOT NULL
+    modified_time   BIGINT NOT NULL DEFAULT 0
 );
 
--- Table: casts
-CREATE TABLE show_casts
+CREATE TABLE IF NOT EXISTS show_casts
 (
     id     INT  NOT NULL,
     image  TEXT,
@@ -245,8 +111,7 @@ CREATE TABLE show_casts
     FOREIGN KEY (id) REFERENCES shows (id) ON DELETE CASCADE
 );
 
--- Table: crews
-CREATE TABLE show_crews
+CREATE TABLE IF NOT EXISTS show_crews
 (
     id    INT  NOT NULL,
     image TEXT,
@@ -254,8 +119,8 @@ CREATE TABLE show_crews
     job   TEXT,
     FOREIGN KEY (id) REFERENCES shows (id) ON DELETE CASCADE
 );
--- Table: external_links
-CREATE TABLE show_external_links
+
+CREATE TABLE IF NOT EXISTS show_external_links
 (
     id   INT  NOT NULL,
     name TEXT NOT NULL,
@@ -263,8 +128,8 @@ CREATE TABLE show_external_links
     FOREIGN KEY (id) REFERENCES shows (id) ON DELETE CASCADE
 );
 
--- Create seasons table
-CREATE TABLE seasons
+-- Seasons and episodes
+CREATE TABLE IF NOT EXISTS seasons
 (
     id            INTEGER PRIMARY KEY NOT NULL,
     name          TEXT                NOT NULL,
@@ -275,8 +140,7 @@ CREATE TABLE seasons
     show_id       INTEGER REFERENCES shows (id) ON DELETE CASCADE
 );
 
--- Create episodes table
-CREATE TABLE episodes
+CREATE TABLE IF NOT EXISTS episodes
 (
     id             INTEGER PRIMARY KEY NOT NULL,
     title          TEXT,
@@ -290,7 +154,7 @@ CREATE TABLE episodes
     file_id        TEXT REFERENCES files (id) ON DELETE CASCADE
 );
 
--- Create trigger function to delete seasons if no episodes present
+-- Trigger functions
 CREATE OR REPLACE FUNCTION delete_season_if_no_episodes()
     RETURNS TRIGGER AS
 $$
@@ -300,18 +164,8 @@ BEGIN
     END IF;
     RETURN OLD;
 END;
-$$
-    LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-
--- Create trigger to delete seasons if no episodes present
-CREATE TRIGGER check_episodes_before_season_delete
-    AFTER DELETE
-    ON episodes
-    FOR EACH ROW
-EXECUTE FUNCTION delete_season_if_no_episodes();
-
--- Create trigger function to delete shows if no seasons present
 CREATE OR REPLACE FUNCTION delete_show_if_no_seasons()
     RETURNS TRIGGER AS
 $$
@@ -321,46 +175,62 @@ BEGIN
     END IF;
     RETURN OLD;
 END;
-$$
-    LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
--- Create trigger to delete shows if no seasons present
+CREATE OR REPLACE FUNCTION delete_related_movie_data()
+    RETURNS TRIGGER AS
+$$
+BEGIN
+    DELETE FROM movie_casts WHERE id = OLD.id;
+    DELETE FROM movie_crews WHERE id = OLD.id;
+    DELETE FROM studios WHERE id = OLD.id;
+    DELETE FROM movie_external_links WHERE id = OLD.id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION delete_related_show_data()
+    RETURNS TRIGGER AS
+$$
+BEGIN
+    DELETE FROM show_casts WHERE id = OLD.id;
+    DELETE FROM show_crews WHERE id = OLD.id;
+    DELETE FROM studios WHERE id = OLD.id;
+    DELETE FROM show_external_links WHERE id = OLD.id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Triggers (safe recreate)
+DROP TRIGGER IF EXISTS check_episodes_before_season_delete ON episodes;
+CREATE TRIGGER check_episodes_before_season_delete
+    AFTER DELETE
+    ON episodes
+    FOR EACH ROW
+EXECUTE FUNCTION delete_season_if_no_episodes();
+
+DROP TRIGGER IF EXISTS check_seasons_before_show_delete ON seasons;
 CREATE TRIGGER check_seasons_before_show_delete
     AFTER DELETE
     ON seasons
     FOR EACH ROW
 EXECUTE FUNCTION delete_show_if_no_seasons();
 
--- Create trigger function to delete related data when a show is deleted
-CREATE OR REPLACE FUNCTION delete_related_show_data()
-    RETURNS TRIGGER AS
-$$
-BEGIN
-    -- Delete related cast entries
-    DELETE FROM show_casts WHERE id = OLD.id;
+DROP TRIGGER IF EXISTS delete_related_movie_data_trigger ON movies;
+CREATE TRIGGER delete_related_movie_data_trigger
+    AFTER DELETE
+    ON movies
+    FOR EACH ROW
+EXECUTE FUNCTION delete_related_movie_data();
 
-    -- Delete related crew entries
-    DELETE FROM show_crews WHERE id = OLD.id;
-
-    -- Delete related studio entries
-    DELETE FROM studios WHERE id = OLD.id;
-
-    -- Delete related external links entries
-    DELETE FROM show_external_links WHERE id = OLD.id;
-
-    RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
-
--- Create trigger to delete related data when a movie is deleted
+DROP TRIGGER IF EXISTS delete_related_show_data_trigger ON shows;
 CREATE TRIGGER delete_related_show_data_trigger
     AFTER DELETE
     ON shows
     FOR EACH ROW
 EXECUTE FUNCTION delete_related_show_data();
 
--- Suggestions API
--- Access params filter the daily selection per user (library flags, rating ceiling, per-type blacklist).
+-- Suggestions API and search/count functions
 DROP FUNCTION IF EXISTS fetch_titles_for_today(int);
 CREATE OR REPLACE FUNCTION fetch_titles_for_today(
     limit_value INT,
@@ -431,8 +301,6 @@ $$ LANGUAGE plpgsql;
 DROP FUNCTION IF EXISTS search_media(text, int[], text[], int[], int[], text, text, boolean, int, int);
 DROP FUNCTION IF EXISTS count_media(text, int[], text[], int[], int[], boolean);
 
--- Search Media Function
--- Access params (p_allowed_ratings..p_blacklist_ids) enforce per-user catalog access; NULL p_allowed_ratings = no ceiling.
 CREATE OR REPLACE FUNCTION search_media(
     p_table_name text, -- 'movies' or 'shows'
     p_studios int[] DEFAULT NULL,
@@ -466,22 +334,18 @@ DECLARE
     sql_order_expr   text;
     sql_join_files   text := '';
 BEGIN
-    -- Validate table name
     IF p_table_name NOT IN ('movies', 'shows') THEN
         RAISE EXCEPTION 'Invalid table name: %', p_table_name;
     END IF;
 
-    -- Validate order by column
     IF p_order_by NOT IN ('title', 'imdb_rating', 'release_year', 'release_date', 'date_added') THEN
         RAISE EXCEPTION 'Invalid order by column: %', p_order_by;
     END IF;
 
-    -- Validate order direction
     IF UPPER(p_order_dir) NOT IN ('ASC', 'DESC') THEN
         RAISE EXCEPTION 'Invalid order direction: %', p_order_dir;
     END IF;
 
-    -- Ensure page and page_size are positive
     IF p_page < 1 THEN
         RAISE EXCEPTION 'Page must be >= 1';
     END IF;
@@ -489,10 +353,8 @@ BEGIN
         RAISE EXCEPTION 'Page size must be >= 1';
     END IF;
 
-    -- Calculate offset
     sql_offset := (p_page - 1) * p_page_size;
 
-    -- Build release year expression
     IF p_table_name = 'movies' THEN
         sql_release_expr := 'release_year::TEXT AS release';
     ELSE
@@ -503,7 +365,6 @@ BEGIN
                              END AS release';
     END IF;
 
-    -- Build ORDER BY expression and optional join for date_added
     IF p_order_by = 'date_added' THEN
         IF p_table_name = 'movies' THEN
             sql_order_expr := 'f.modified_time';
@@ -515,7 +376,6 @@ BEGIN
         sql_order_expr := format('%I', p_order_by);
     END IF;
 
-    -- Build dynamic SQL safely with optional NULL filtering, LIMIT and OFFSET
     sql_query := format(
             'SELECT t.id AS tmdbId, title, poster_path AS posterPath, imdb_rating AS imdbRating, %s
              FROM %I t
@@ -541,18 +401,14 @@ BEGIN
             sql_offset
                  );
 
-    -- Log the query as a single line
     RAISE LOG 'Dynamic search_media query: %', sql_query;
 
-    -- Execute the dynamic query
     RETURN QUERY EXECUTE sql_query
         USING p_studios, p_parental_ratings, p_release_years, p_genres,
               p_allowed_ratings, p_allow_unrated, p_unrated_ratings, p_blacklist_ids;
 END;
 $$ LANGUAGE plpgsql;
 
--- Count Media Function
--- Mirrors search_media filters (incl. per-user access) for pagination totals; p_include_nulls kept for call-compat.
 CREATE OR REPLACE FUNCTION count_media(
     p_table_name text,
     p_studios int[] DEFAULT NULL,
@@ -599,10 +455,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- =========================================================
--- INDEXES FOR MOVIES
--- =========================================================
-
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_movies_studios_gin
     ON movies USING GIN (studios);
 
@@ -618,13 +471,8 @@ CREATE INDEX IF NOT EXISTS idx_movies_release_year
 CREATE INDEX IF NOT EXISTS idx_movies_imdb_rating
     ON movies (imdb_rating);
 
--- ORDER BY date_added (via files join)
 CREATE INDEX IF NOT EXISTS idx_files_modified_time
     ON files (id, modified_time);
-
--- =========================================================
--- INDEXES FOR SHOWS
--- =========================================================
 
 CREATE INDEX IF NOT EXISTS idx_shows_studios_gin
     ON shows USING GIN (studios);
@@ -641,12 +489,11 @@ CREATE INDEX IF NOT EXISTS idx_shows_release_year
 CREATE INDEX IF NOT EXISTS idx_shows_imdb_rating
     ON shows (imdb_rating);
 
--- Ordering by modified_time (shows table has its own column)
 CREATE INDEX IF NOT EXISTS idx_shows_modified_time
     ON shows (modified_time);
 
-
--- Materialized view for movie details
+-- Materialized views
+DROP MATERIALIZED VIEW IF EXISTS movie_details_mv;
 CREATE MATERIALIZED VIEW movie_details_mv AS
 SELECT m.id,
        m.title,
@@ -728,11 +575,22 @@ FROM movies m
     WHERE mm.collection_id = m.collection_id
     ) coll ON TRUE;
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_movie_details_id ON movie_details_mv (id);
+ALTER MATERIALIZED VIEW movie_details_mv OWNER TO CURRENT_USER;
 
-CREATE UNIQUE INDEX idx_movie_details_id ON movie_details_mv (id);
+CREATE OR REPLACE FUNCTION refresh_movie_details_mv()
+    RETURNS void
+    SECURITY DEFINER
+    SET search_path = public
+AS
+$$
+BEGIN
+    REFRESH MATERIALIZED VIEW movie_details_mv;
+END;
+$$ LANGUAGE plpgsql;
+ALTER FUNCTION refresh_movie_details_mv() OWNER TO CURRENT_USER;
 
-
--- Materialized view for tvshows details
+DROP MATERIALIZED VIEW IF EXISTS show_details_mv;
 CREATE MATERIALIZED VIEW show_details_mv AS
 SELECT s.id,
        s.title,
@@ -753,29 +611,24 @@ SELECT s.id,
        s.plot,
        s.director,
 
-       -- Genres
        (SELECT json_agg(jsonb_build_object('id', g.id, 'name', g.name) ORDER BY g.name)
         FROM genres g
         WHERE g.id = ANY (s.genres))                              AS genres,
 
-       -- Studios
        (SELECT json_agg(jsonb_build_object('id', st.id, 'name', st.name, 'logo_path', st.logo_path, 'origin_country',
                                            st.origin_country) ORDER BY st.name)
         FROM studios st
         WHERE st.id = ANY (s.studios))                            AS studios,
 
-       -- Cast
        (SELECT json_agg(jsonb_build_object('name', c.name, 'image', c.image, 'gender', c.gender, 'role', c.role)
                         ORDER BY c.role)
         FROM show_casts c
         WHERE c.id = s.id)                                        AS cast,
 
-       -- Crew
        (SELECT json_agg(jsonb_build_object('name', cr.name, 'image', cr.image, 'job', cr.job) ORDER BY cr.job)
         FROM show_crews cr
         WHERE cr.id = s.id)                                       AS crew,
 
-       -- Latest season with episodes count
        (SELECT jsonb_build_object(
                        'id', se.id,
                        'name', se.name,
@@ -795,7 +648,20 @@ SELECT s.id,
 
 FROM shows s;
 
-CREATE UNIQUE INDEX idx_show_details_id ON show_details_mv (id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_show_details_id ON show_details_mv (id);
+ALTER MATERIALIZED VIEW show_details_mv OWNER TO CURRENT_USER;
+
+CREATE OR REPLACE FUNCTION refresh_show_details_mv()
+    RETURNS void
+    SECURITY DEFINER
+    SET search_path = public
+AS
+$$
+BEGIN
+    REFRESH MATERIALIZED VIEW show_details_mv;
+END;
+$$ LANGUAGE plpgsql;
+ALTER FUNCTION refresh_show_details_mv() OWNER TO CURRENT_USER;
 
 -- Set parallel workers
 SET max_parallel_workers_per_gather = 4;
