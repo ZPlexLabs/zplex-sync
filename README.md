@@ -51,6 +51,30 @@ properties, then other properties.
 | `zplex.db.host` / `port` / `username` / `password` | PostgreSQL catalog store |
 | `zplex.cache.host` / `port` / `username` / `password` | Redis/Valkey (TLS) filter cache |
 
+### Environment variables used now
+
+All placeholders in `src/main/resources/application.properties` are required today
+(no defaults are defined there).
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `GOOGLE_DRIVE_CLIENT_EMAIL` | Yes | Service account email for Drive API JWT auth. |
+| `GOOGLE_DRIVE_CLIENT_ID` | Yes | Service account client id. |
+| `GOOGLE_DRIVE_PRIVATE_KEY_ID` | Yes | Service account private key id. |
+| `GOOGLE_DRIVE_PRIVATE_KEY_PKCS8` | Yes | Service account private key (supports escaped `\\n`). |
+| `MOVIES_FOLDER` | Yes | Google Drive folder id for movies library root. |
+| `SHOWS_FOLDER` | Yes | Google Drive folder id for shows library root. |
+| `ZPLEX_DATABASE_HOST` | Yes | PostgreSQL host. |
+| `ZPLEX_DATABASE_PORT` | Yes | PostgreSQL port. |
+| `ZPLEX_DATABASE_USERNAME` | Yes | PostgreSQL username. |
+| `ZPLEX_DATABASE_PASSWORD` | Yes | PostgreSQL password. |
+| `ZPLEX_CACHE_HOST` | Yes | Redis/Valkey host. |
+| `ZPLEX_CACHE_PORT` | Yes | Redis/Valkey port. |
+| `ZPLEX_CACHE_USERNAME` | Yes | Redis/Valkey username. |
+| `ZPLEX_CACHE_PASSWORD` | Yes | Redis/Valkey password. |
+| `OMDB_API_KEY` | Yes | OMDB API key for metadata enrichment. |
+| `TMDB_API_KEY` | Yes | TMDB API key for metadata enrichment. |
+
 ## Tech stack
 
 | Concern | Library | Version |
