@@ -11,7 +11,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Semaphore
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
-import redis.clients.jedis.JedisPooled
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import zechs.zplex.sync.data.model.DriveFile
@@ -113,7 +112,7 @@ class IndexingService {
     }
 
     private val redis by lazy {
-        JedisPooled(RedisConfig.buildRedisUrl())
+        RedisConfig.buildClient()
     }
 
     operator fun invoke() {
