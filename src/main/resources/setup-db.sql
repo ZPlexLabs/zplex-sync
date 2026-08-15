@@ -404,7 +404,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Drop previous signatures so the access-aware versions below are unambiguous
+DROP FUNCTION IF EXISTS search_media(text, int[], text[], int[], int[], text, text, boolean, int, int);
+DROP FUNCTION IF EXISTS count_media(text, int[], text[], int[], int[], boolean);
+
 -- Search Media Function
+-- Access params (p_allowed_ratings..p_blacklist_ids) enforce per-user catalog access; NULL p_allowed_ratings = no ceiling.
 CREATE OR REPLACE FUNCTION search_media(
     p_table_name text, -- 'movies' or 'shows'
     p_studios int[] DEFAULT NULL,
@@ -415,7 +420,11 @@ CREATE OR REPLACE FUNCTION search_media(
     p_order_dir text DEFAULT 'ASC',
     p_include_nulls boolean DEFAULT true,
     p_page int DEFAULT 1,
-    p_page_size int DEFAULT 50
+    p_page_size int DEFAULT 50,
+    p_allowed_ratings text[] DEFAULT NULL,
+    p_allow_unrated boolean DEFAULT true,
+    p_unrated_ratings text[] DEFAULT NULL,
+    p_blacklist_ids int[] DEFAULT NULL
 )
     RETURNS TABLE
             (
@@ -492,6 +501,10 @@ BEGIN
                AND ($2::text[] IS NULL OR parental_rating = ANY($2))
                AND ($3::int[] IS NULL OR release_year = ANY($3))
                AND ($4::int[] IS NULL OR genres && $4)
+               AND ($5::text[] IS NULL
+                    OR parental_rating = ANY($5)
+                    OR ($6 AND (parental_rating IS NULL OR ($7::text[] IS NOT NULL AND parental_rating = ANY($7)))))
+               AND ($8::int[] IS NULL OR t.id <> ALL($8))
                %s
              ORDER BY %s %s
              LIMIT %s OFFSET %s',
@@ -510,7 +523,56 @@ BEGIN
 
     -- Execute the dynamic query
     RETURN QUERY EXECUTE sql_query
-        USING p_studios, p_parental_ratings, p_release_years, p_genres;
+        USING p_studios, p_parental_ratings, p_release_years, p_genres,
+              p_allowed_ratings, p_allow_unrated, p_unrated_ratings, p_blacklist_ids;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Count Media Function
+-- Mirrors search_media filters (incl. per-user access) for pagination totals; p_include_nulls kept for call-compat.
+CREATE OR REPLACE FUNCTION count_media(
+    p_table_name text,
+    p_studios int[] DEFAULT NULL,
+    p_parental_ratings text[] DEFAULT NULL,
+    p_release_years int[] DEFAULT NULL,
+    p_genres int[] DEFAULT NULL,
+    p_include_nulls boolean DEFAULT true,
+    p_allowed_ratings text[] DEFAULT NULL,
+    p_allow_unrated boolean DEFAULT true,
+    p_unrated_ratings text[] DEFAULT NULL,
+    p_blacklist_ids int[] DEFAULT NULL
+)
+    RETURNS integer
+AS
+$$
+DECLARE
+    sql_query text;
+    total     integer;
+BEGIN
+    IF p_table_name NOT IN ('movies', 'shows') THEN
+        RAISE EXCEPTION 'Invalid table name: %', p_table_name;
+    END IF;
+
+    sql_query := format(
+            'SELECT count(*)::int
+             FROM %I t
+             WHERE ($1::int[] IS NULL OR studios && $1)
+               AND ($2::text[] IS NULL OR parental_rating = ANY($2))
+               AND ($3::int[] IS NULL OR release_year = ANY($3))
+               AND ($4::int[] IS NULL OR genres && $4)
+               AND ($5::text[] IS NULL
+                    OR parental_rating = ANY($5)
+                    OR ($6 AND (parental_rating IS NULL OR ($7::text[] IS NOT NULL AND parental_rating = ANY($7)))))
+               AND ($8::int[] IS NULL OR t.id <> ALL($8))',
+            p_table_name
+                 );
+
+    EXECUTE sql_query
+        INTO total
+        USING p_studios, p_parental_ratings, p_release_years, p_genres,
+              p_allowed_ratings, p_allow_unrated, p_unrated_ratings, p_blacklist_ids;
+
+    RETURN total;
 END;
 $$ LANGUAGE plpgsql;
 

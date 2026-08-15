@@ -27,6 +27,12 @@ java -jar build/libs/zplex-sync.jar --dev
 Entry point: `zechs.zplex.sync.MainKt` → `IndexingService()` runs genres, movies, shows,
 then filter caches, and exits.
 
+The schema in `src/main/resources/setup-db.sql` also defines the read-side query functions
+`search_media` and `count_media`. Both accept trailing per-user access params
+(`p_allowed_ratings` — NULL means no rating ceiling, `p_allow_unrated`, `p_unrated_ratings`,
+`p_blacklist_ids`) so `zplex-api` can filter catalog listings by rating rank and hide
+blacklisted titles.
+
 ## Configuration
 
 Config is layered: `application.properties` (base) is overridden by
